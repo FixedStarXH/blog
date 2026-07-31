@@ -1,0 +1,39 @@
+package dao
+
+import (
+	"blog-system/model"
+
+	"gorm.io/gorm"
+)
+
+type ArticleDAO struct{}
+
+func NewArticleDAO() *ArticleDAO {
+	return &ArticleDAO{}
+}
+
+func (d *ArticleDAO) FindPublished(db *gorm.DB, page, pageSize int) ([]model.Article, int64, error) {
+	var articles []model.Article
+	var total int64
+
+	db.Model(&model.Article{}).Where("status = ?", 1).Count(&total)
+
+	err := db.Where("status = ?", 1).
+		Preload("Author").
+		Preload("Category").
+		Order("created_at desc").
+		Offset((page - 1) * pageSize).
+		Limit(pageSize).
+		Find(&articles).Error
+
+	return articles, total, err
+}
+
+func (d *ArticleDAO) FindByID(db *gorm.DB, id uint) (*model.Article, error) {
+	var article model.Article
+	err := db.Preload("Author").Preload("Category").First(&article, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &article, nil
+}

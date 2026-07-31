@@ -1,0 +1,14 @@
+# 配置文件（包含数据库密码，不要上传）
+config.yaml
+
+# 上传的图片
+uploads/
+
+# 编译产物
+*.exe
+*.out
+
+# IDE 文件
+.idea/
+.vscode/
+*.iml
