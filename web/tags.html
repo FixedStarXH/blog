@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>标签墙 — LUMI</title>
+<meta name="description" content="全部标签,按标签浏览文章。">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="topbar" id="topbar"></header>
+
+<section class="page-hero">
+  <div class="grid">
+    <div class="crumb"><a href="index.html">Home</a> / <span>Tags</span></div>
+    <h1>标签墙</h1>
+    <div class="sub">ALL TAGS</div>
+  </div>
+</section>
+
+<section class="tag-wall">
+  <div class="grid">
+    <div class="loading" id="tag-loading" style="grid-column:1/13">加载中…</div>
+    <div class="wrap" id="tag-wrap" style="display:none;"></div>
+  </div>
+</section>
+
+<footer class="footer" id="footer"></footer>
+
+<script src="js/api.js"></script>
+<script src="js/common.js"></script>
+<script>
+initPage('tags').then(loadTags);
+
+async function loadTags() {
+  try {
+    const tags = await api.get('/api/tags');
+    const wrap = document.getElementById('tag-wrap');
+    const loading = document.getElementById('tag-loading');
+    loading.style.display = 'none';
+    wrap.style.display = 'flex';
+    if (!tags.length) { wrap.innerHTML = '<div class="empty">暂无标签</div>'; return; }
+    wrap.innerHTML = tags.map(t => `
+      <a class="tag-item" href="articles.html?tag=${encodeURIComponent(t.name)}">
+        # ${esc(t.name)} <span class="n">${t.articleCount ?? 0}</span>
+      </a>`).join('');
+  } catch (e) {
+    document.getElementById('tag-loading').innerHTML = '加载失败: ' + esc(e.message);
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>孤舟的博客</title>
+<style>
+/* ============================================================
+   风格 B —— 极简阅读风 (Minimal Reading)
+   纯白 + 衬线 + 大留白,内容最优先,类似 Medium / Ghost
+   ============================================================ */
+:root {
+  --paper:     #FFFFFF;
+  --ink:       #191919;
+  --ink-soft:  #6E6E6E;
+  --ink-faint: #9B9B9B;
+  --line:      #ECECEC;
+  --accent:    #0E7C66;    /* 克制的深墨绿,低存在感 */
+  --accent-bg: #EAF4F1;
+
+  --font-head: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-body: "Songti SC", "Noto Serif SC", "SimSun", Georgia, serif;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.85;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+.wrap { max-width: 700px; margin: 0 auto; padding: 0 28px; }
+
+/* ---- 顶部导航 ---- */
+.topbar { border-bottom: 1px solid var(--line); }
+.topbar .wrap {
+  display:flex; align-items:center; justify-content:space-between;
+  height: 62px;
+}
+.logo { font-family: var(--font-head); font-weight:600; font-size: 17px; letter-spacing:.02em; }
+.topnav { display:flex; gap: 28px; }
+.topnav a {
+  font-family: var(--font-head); font-size:14px; color: var(--ink-soft);
+  transition: color .15s ease;
+}
+.topnav a:hover, .topnav a.active { color: var(--ink); }
+.topnav a.active { color: var(--accent); font-weight:600; }
+
+/* ---- 主视觉:极简,不喧宾夺主 ---- */
+.hero { padding: 110px 0 70px; text-align:center; }
+.hero .eyebrow {
+  font-family: var(--font-head); font-size:12px; letter-spacing:.28em;
+  color: var(--ink-faint); text-transform: uppercase;
+}
+.hero h1 {
+  font-size: 46px; font-weight: 700; line-height: 1.25;
+  margin: 22px auto 0; letter-spacing:.01em;
+}
+.hero h1 .serif { font-family: var(--font-body); color: var(--accent); }
+.hero .sub {
+  margin: 20px auto 0; max-width: 46ch;
+  font-size: 16.5px; color: var(--ink-soft);
+}
+.hero .rule {
+  width: 44px; height: 3px; background: var(--accent);
+  margin: 36px auto 0;
+}
+
+/* ---- 文章列表 ---- */
+.section-label {
+  font-family: var(--font-head); font-size:13px; letter-spacing:.2em;
+  color: var(--ink-faint); text-transform: uppercase;
+  margin-bottom: 40px; display:flex; align-items:center; gap:14px;
+}
+.section-label::after { content:""; flex:1; height:1px; background: var(--line); }
+
+.post { padding: 34px 0; border-bottom: 1px solid var(--line); }
+.post .meta {
+  font-family: var(--font-head); font-size:13px; color: var(--ink-soft);
+  display:flex; align-items:center; gap:10px; margin-bottom: 12px;
+}
+.post .meta .cat {
+  color: var(--accent); font-weight:600;
+}
+.post .meta .dot { width:3px; height:3px; background: var(--ink-faint); border-radius:50%; }
+.post h2 {
+  font-size: 24px; font-weight:700; line-height: 1.4; margin-bottom: 10px;
+  transition: color .15s ease;
+}
+.post h2 a:hover { color: var(--accent); }
+.post .excerpt { font-size: 16px; color: var(--ink-soft); max-width: 60ch; }
+.post .readtime { font-family: var(--font-head); font-size:13px; color: var(--ink-faint); margin-top: 14px; }
+
+/* ---- 加载更多 ---- */
+.more-wrap { text-align:center; padding: 56px 0 30px; }
+.more {
+  font-family: var(--font-head); font-size:15px; font-weight:600;
+  color: var(--accent); border:1px solid var(--accent);
+  padding: 13px 44px; border-radius: 999px;
+  transition: background .15s ease, color .15s ease;
+}
+.more:hover { background: var(--accent); color: #fff; }
+
+/* ---- 页脚 ---- */
+.footer { border-top: 1px solid var(--line); margin-top: 70px; padding: 44px 0; }
+.footer .wrap {
+  display:flex; align-items:center; justify-content:space-between;
+  font-family: var(--font-head); font-size:13px; color: var(--ink-faint);
+}
+.footer a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <a class="logo" href="#">孤舟的博客</a>
+    <nav class="topnav">
+      <a href="#" class="active">首页</a>
+      <a href="#">归档</a>
+      <a href="#">分类</a>
+      <a href="#">关于</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <div class="eyebrow">A Blog About Go &amp; More</div>
+    <h1>孤舟的博客<br><span class="serif">用文字沉淀每一次成长</span></h1>
+    <p class="sub">记录 Go 语言学习的点滴,分享后端开发的思考。在这里,技术会过时,但记录本身是复利。</p>
+    <div class="rule"></div>
+  </div>
+</section>
+
+<main class="wrap">
+  <div class="section-label">最新文章</div>
+
+  <article class="post">
+    <div class="meta"><span class="cat">Go后端</span><span class="dot"></span><span>2026-07-28</span><span class="dot"></span><span>阅读 328</span></div>
+    <h2><a href="#">Go 语言入门指南:语法与并发初探</a></h2>
+    <p class="excerpt">从变量、控制流到 goroutine 与 channel,用最短篇幅建立 Go 语言的完整心智模型,附可运行示例。</p>
+    <div class="readtime">预计阅读 6 分钟</div>
+  </article>
+
+  <article class="post">
+    <div class="meta"><span class="cat">数据库</span><span class="dot"></span><span>2026-07-24</span><span class="dot"></span><span>阅读 512</span></div>
+    <h2><a href="#">MySQL 索引优化:从原理到 EXPLAIN 实战</a></h2>
+    <p class="excerpt">B+ 树到底怎么存数据?为什么明明建了索引却不走?结合 EXPLAIN 输出逐字段拆解索引失效的六大场景。</p>
+    <div class="readtime">预计阅读 10 分钟</div>
+  </article>
+
+  <article class="post">
+    <div class="meta"><span class="cat">前端</span><span class="dot"></span><span>2026-07-20</span><span class="dot"></span><span>阅读 201</span></div>
+    <h2><a href="#">用纯 CSS 复刻杂志编辑风页面</a></h2>
+    <p class="excerpt">没有前端框架,只靠 Grid、clamp() 和硬阴影,也能做出有质感的编辑排版。分享这一整套 token 与组件思路。</p>
+    <div class="readtime">预计阅读 8 分钟</div>
+  </article>
+
+  <article class="post">
+    <div class="meta"><span class="cat">数据库</span><span class="dot"></span><span>2026-07-15</span><span class="dot"></span><span>阅读 447</span></div>
+    <h2><a href="#">GORM 入门教程:模型、迁移与关联</a></h2>
+    <p class="excerpt">AutoMigrate 自动建表,Preload 预加载关联。用一篇博客的数据结构,把 GORM 最常用的能力一次讲透。</p>
+    <div class="readtime">预计阅读 7 分钟</div>
+  </article>
+
+  <article class="post">
+    <div class="meta"><span class="cat">工具链</span><span class="dot"></span><span>2026-07-10</span><span class="dot"></span><span>阅读 172</span></div>
+    <h2><a href="#">Gin 中间件实战:日志、恢复与鉴权</a></h2>
+    <p class="excerpt">请求日志、Panic 恢复、JWT 校验……用 40 行代码讲清楚 Gin 中间件的执行顺序与 Next 的语义。</p>
+    <div class="readtime">预计阅读 5 分钟</div>
+  </article>
+
+  <article class="post">
+    <div class="meta"><span class="cat">随笔</span><span class="dot"></span><span>2026-07-02</span><span class="dot"></span><span>阅读 96</span></div>
+    <h2><a href="#">2026 年中复盘:我为什么坚持写博客</a></h2>
+    <p class="excerpt">写博客七年,技术会过时,但记录本身是复利。聊聊写作如何反向塑造了我的学习方式与知识体系。</p>
+    <div class="readtime">预计阅读 4 分钟</div>
+  </article>
+
+  <div class="more-wrap"><a class="more" href="#">加载更多 →</a></div>
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <span>© 2026 孤舟</span>
+    <div><a href="#">RSS</a> &nbsp;·&nbsp; <a href="#">GitHub</a> &nbsp;·&nbsp; <a href="#">关于</a></div>
+  </div>
+</footer>
+
+</body>
+</html>

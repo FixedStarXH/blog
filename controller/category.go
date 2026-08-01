@@ -18,7 +18,7 @@ func NewCategoryController(service *service.CategoryService) *CategoryController
 func (c *CategoryController) GetCategoryList(ctx *gin.Context) {
 	categories, err := c.service.GetAllCategories()
 	if err != nil {
-		utils.Error(ctx, "获取·列表失败")
+		utils.Error(ctx, "获取分类列表失败")
 		return
 	}
 	utils.Success(ctx, categories)

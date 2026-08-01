@@ -56,7 +56,7 @@ func initTestData() {
 	admin := User{
 		Username: "admin",
 		Email:    "admin@example.com",
-		Password: "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy", // 明文: 123456
+		Password: "$2a$10$u6UvGzF1VT7mGeNu.ZI5nepFP/SQbpY6/cudhaewN9q9MdwtYM1Jm", // 明文: 123456 (bcrypt)
 		Nickname: "管理员",
 		Role:     1,
 	}
