@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"blog-system/config"
+	"blog-system/utils"
 
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -56,21 +56,15 @@ func InitDB() error {
 	return nil
 }
 
-// hashPassword 生成 BCrypt 密码哈希
-//
-// 为什么动态生成，而不是像之前那样写死一串哈希字符串？
-//  1. 写死的哈希可能和明文"123456"对不上，登录直接失败（审核报告 P3）
-//  2. bcrypt 每次生成的盐(盐)都不同，即使相同密码哈希也不同，这是标准做法
-//
-// 为什么不返回 error 而是 panic？
-//
-//	哈希失败说明环境出大问题，启动阶段直接暴露，而不是让程序带病运行
-func hashPassword(plain string) string {
-	hashed, err := bcrypt.GenerateFromPassword([]byte(plain), bcrypt.DefaultCost)
+// mustHash 种子数据专用：生成密码哈希
+// 为什么不直接用 utils.HashPassword？它返回 (string, error)，种子数据失败应直接暴露，
+// 所以包一层：出错就 panic（启动即报错，而不是带病运行）
+func mustHash(plain string) string {
+	h, err := utils.HashPassword(plain)
 	if err != nil {
 		panic("密码哈希生成失败: " + err.Error())
 	}
-	return string(hashed)
+	return h
 }
 
 // initTestData 种子数据（幂等：已有用户就跳过，不会重复插入）
@@ -83,9 +77,9 @@ func initTestData() {
 	}
 
 	// 1. 三角色用户（角色常量见 const.go）
-	admin := User{Username: "admin", Email: "admin@example.com", Password: hashPassword("123456"), Nickname: "站长", Role: RoleAdmin, Status: UserStatusActive}
-	editor := User{Username: "editor", Email: "editor@example.com", Password: hashPassword("123456"), Nickname: "编辑小陈", Role: RoleEditor, Status: UserStatusActive}
-	user1 := User{Username: "user1", Email: "user1@example.com", Password: hashPassword("123456"), Nickname: "普通小李", Role: RoleUser, Status: UserStatusActive}
+	admin := User{Username: "admin", Email: "admin@example.com", Password: mustHash("123456"), Nickname: "站长", Role: RoleAdmin, Status: UserStatusActive}
+	editor := User{Username: "editor", Email: "editor@example.com", Password: mustHash("123456"), Nickname: "编辑小陈", Role: RoleEditor, Status: UserStatusActive}
+	user1 := User{Username: "user1", Email: "user1@example.com", Password: mustHash("123456"), Nickname: "普通小李", Role: RoleUser, Status: UserStatusActive}
 	DB.Create(&admin)
 	DB.Create(&editor)
 	DB.Create(&user1)
