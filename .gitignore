@@ -4,6 +4,9 @@ config.yaml
 # 上传的图片
 uploads/
 
+# 本地设计文档（不上传，仅本地使用）
+docs/
+
 # 编译产物
 *.exe
 *.out
