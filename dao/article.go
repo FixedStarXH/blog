@@ -37,3 +37,25 @@ func (d *ArticleDAO) FindByID(db *gorm.DB, id uint) (*model.Article, error) {
 	}
 	return &article, nil
 }
+
+func (d *ArticleDAO) FindByAuthorID(db *gorm.DB, authorID uint, status, page, pageSize int) ([]model.Article, int64, error) {
+	var articles []model.Article
+	var total int64
+
+	query := db.Model(&model.Article{}).Where("author_id = ?", authorID)
+
+	if status >= 0 {
+		query = query.Where("status = ?", status)
+	}
+	query.Count(&total)
+
+	err := query.
+		Preload("Category").
+		Preload("Tags").
+		Order("created_at desc").
+		Offset((page - 1) * pageSize).
+		Limit(pageSize).
+		Find(&articles).Error
+
+	return articles, total, err
+}
