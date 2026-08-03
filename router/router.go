@@ -8,6 +8,7 @@ import (
 
 	"blog-system/controller"
 	"blog-system/dao"
+	"blog-system/middleware"
 	"blog-system/model"
 	"blog-system/service"
 
@@ -17,18 +18,32 @@ import (
 func Init(r *gin.Engine) {
 	articleDAO := dao.NewArticleDAO()
 	categoryDAO := dao.NewCategoryDAO()
+	userDAO := dao.NewUserDAO()
 
 	articleSvc := service.NewArticleService(articleDAO, model.DB)
 	categorySvc := service.NewCategoryService(categoryDAO, model.DB)
+	authSvc := service.NewAuthService(userDAO, model.DB)
 
 	articleCtl := controller.NewArticleController(articleSvc)
 	categoryCtl := controller.NewCategoryController(categorySvc)
+	authCtl := controller.NewAuthController(authSvc)
 
 	api := r.Group("/api")
 	{
 		api.GET("/articles", articleCtl.GetArticleList)
 		api.GET("/categories", categoryCtl.GetCategoryList)
 		api.GET("/articles/:id", articleCtl.GetArticleDetail)
+
+		// 阶段三：用户体系
+		// 注册/登录不需要登录
+		api.POST("/auth/register", authCtl.Register)
+		api.POST("/auth/login", authCtl.Login)
+
+		// 以下接口需要先登录（AuthRequired 解析 token 后，handler 用 GetUserID 取身份）
+		authed := api.Group("", middleware.AuthRequired())
+		authed.GET("/auth/me", authCtl.Me)
+		authed.PUT("/auth/me", authCtl.UpdateProfile)
+		authed.PUT("/auth/password", authCtl.ChangePassword)
 	}
 
 	// 前端 SPA 静态资源托管(web/ 目录)
