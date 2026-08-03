@@ -34,13 +34,14 @@ func GetRole(c *gin.Context) int {
 // AuthRequired 登录鉴权中间件：必须携带有效 token 才放行
 //
 // 用法：需要登录的接口分组上挂它，如
-//   authed := api.Group("", middleware.AuthRequired())
+//
+//	authed := api.Group("", middleware.AuthRequired())
 //
 // 流程（JWT 小课第 4 节）：
-//   1. 从 Header 取 "Authorization: Bearer <token>"
-//   2. ParseToken 验签 + 查过期
-//   3. 成功 → 把 userID/role 塞进 context → c.Next() 放行
-//   4. 失败 → 返回 401 并 c.Abort() 拦截（后续 handler 不再执行）
+//  1. 从 Header 取 "Authorization: Bearer <token>"
+//  2. ParseToken 验签 + 查过期
+//  3. 成功 → 把 userID/role 塞进 context → c.Next() 放行
+//  4. 失败 → 返回 401 并 c.Abort() 拦截（后续 handler 不再执行）
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 1. 取 Authorization 头，标准格式 "Bearer xxx"
@@ -72,11 +73,13 @@ func AuthRequired() gin.HandlerFunc {
 // RequireRole 角色权限中间件：要求角色 >= minRole 才放行（RBAC）
 //
 // 用法：必须放在 AuthRequired 之后（它要读 context 里的 role），如
-//   admin := api.Group("/admin", middleware.AuthRequired(), middleware.RequireRole(model.RoleEditor))
+//
+//	admin := api.Group("/admin", middleware.AuthRequired(), middleware.RequireRole(model.RoleEditor))
 //
 // 为什么用 ">=" 而不是 "=="？
-//   权限是越级包含的：管理员(3)天然拥有编辑(2)的权限。
-//   RequireRole(RoleEditor) 表示"编辑及以上"，管理员也能过——避免每个接口都写死角色
+//
+//	权限是越级包含的：管理员(3)天然拥有编辑(2)的权限。
+//	RequireRole(RoleEditor) 表示"编辑及以上"，管理员也能过——避免每个接口都写死角色
 func RequireRole(minRole int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role := GetRole(c)

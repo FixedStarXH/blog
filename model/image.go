@@ -8,10 +8,10 @@ type Image struct {
 	BaseModel
 
 	Name       string `gorm:"not null;size:255;comment:原始文件名" json:"name"`
-	URL        string `gorm:"not null;size:255;comment:存储路径" json:"url"`          // 如 /uploads/2026/08/xxxx.jpg
-	Size       int64  `gorm:"not null;comment:大小字节" json:"size"`                 // int64 防止超大文件溢出
-	Ext        string `gorm:"not null;size:10;comment:扩展名" json:"ext"`            // 如 jpg/png（白名单校验）
-	UploaderID uint   `gorm:"not null;index;comment:上传者ID" json:"uploaderId"`    // 谁传的，便于按人管理
+	URL        string `gorm:"not null;size:255;comment:存储路径" json:"url"`      // 如 /uploads/2026/08/xxxx.jpg
+	Size       int64  `gorm:"not null;comment:大小字节" json:"size"`              // int64 防止超大文件溢出
+	Ext        string `gorm:"not null;size:10;comment:扩展名" json:"ext"`        // 如 jpg/png（白名单校验）
+	UploaderID uint   `gorm:"not null;index;comment:上传者ID" json:"uploaderId"` // 谁传的，便于按人管理
 
 	Uploader User `gorm:"foreignKey:UploaderID" json:"uploader,omitempty"` // 关联上传者
 }

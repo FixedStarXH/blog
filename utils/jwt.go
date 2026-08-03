@@ -16,9 +16,9 @@ import (
 //
 // RegisteredClaims 是官方内置字段（iss/exp/iat...），嵌入它就有 exp 过期校验
 type Claims struct {
-	UserID uint `json:"user_id"` // 用户ID（注意 json 标签，和前端/数据库无关，纯粹 token 内部格式）
-	Role   int  `json:"role"`    // 角色：1普通 2编辑 3管理员（RBAC 权限判断直接读它）
-	jwt.RegisteredClaims         // 内置：exp 过期时间、iat 签发时间
+	UserID               uint `json:"user_id"` // 用户ID（注意 json 标签，和前端/数据库无关，纯粹 token 内部格式）
+	Role                 int  `json:"role"`    // 角色：1普通 2编辑 3管理员（RBAC 权限判断直接读它）
+	jwt.RegisteredClaims      // 内置：exp 过期时间、iat 签发时间
 }
 
 // tokenTTL token 有效期：72 小时
