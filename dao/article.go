@@ -59,3 +59,7 @@ func (d *ArticleDAO) FindByAuthorID(db *gorm.DB, authorID uint, status, page, pa
 
 	return articles, total, err
 }
+
+func (d *ArticleDAO) Create(db *gorm.DB, article *model.Article) error {
+	return db.Create(article).Error
+}
