@@ -39,21 +39,22 @@ func NewArticleController(service *service.ArticleService) *ArticleController {
 }
 
 func (c *ArticleController) GetArticleList(ctx *gin.Context) {
+	keyword := ctx.Query("keyword")
+
+	authorID, _ := strconv.ParseUint(ctx.DefaultQuery("authorId", "0"), 10, 64)
+
+	tag := ctx.Query("tag")
+	sortBy := ctx.Query("sort")
+
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "10"))
 
-	articles, total, err := c.service.GetPublishedArticles(page, pageSize)
+	articles, total, err := c.service.GetPublishedArticles(keyword, uint(authorID), tag, sortBy, page, pageSize)
 	if err != nil {
 		utils.Error(ctx, "获取文章列表失败")
 		return
 	}
-
-	utils.Success(ctx, gin.H{
-		"list":     articles,
-		"total":    total,
-		"page":     page,
-		"pageSize": pageSize,
-	})
+	utils.Success(ctx, gin.H{"list": articles, "total": total, "page": page, "pageSize": pageSize})
 }
 
 func (c *ArticleController) GetArticleDetail(ctx *gin.Context) {
@@ -188,6 +189,37 @@ func (c *ArticleController) DeleteMyArticle(ctx *gin.Context) {
 			return
 		}
 		utils.Error(ctx, "删除失败")
+		return
+	}
+	utils.Success(ctx, nil)
+}
+
+func (c *ArticleController) AddView(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
+	if err != nil {
+		utils.Fail(ctx, "无效的文章ID")
+		return
+	}
+
+	ip := ctx.ClientIP()
+
+	if err := c.service.AddView(uint(id), ip); err != nil {
+		utils.Error(ctx, "浏览量更新失败")
+		return
+	}
+	utils.Success(ctx, nil)
+}
+func (c *ArticleController) Like(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
+	if err != nil {
+		utils.Fail(ctx, "无效的文章ID")
+		return
+	}
+
+	ip := ctx.ClientIP()
+
+	if err := c.service.Like(uint(id), ip); err != nil {
+		utils.Error(ctx, "点赞失败")
 		return
 	}
 	utils.Success(ctx, nil)

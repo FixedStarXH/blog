@@ -16,14 +16,14 @@ func NewArticleService(dao *dao.ArticleDAO, db *gorm.DB) *ArticleService {
 	return &ArticleService{dao: dao, db: db}
 }
 
-func (s *ArticleService) GetPublishedArticles(page, pageSize int) ([]model.Article, int64, error) {
+func (s *ArticleService) GetPublishedArticles(keyword string, authorID uint, tag, sortBy string, page, pageSize int) ([]model.Article, int64, error) {
 	if pageSize <= 0 || pageSize > 50 {
 		pageSize = 10
 	}
 	if page <= 0 {
 		page = 1
 	}
-	return s.dao.FindPublished(s.db, page, pageSize)
+	return s.dao.FindPublished(s.db, keyword, authorID, tag, sortBy, page, pageSize)
 
 }
 
@@ -90,4 +90,12 @@ func (s *ArticleService) UpdateMyArticle(id, authorID, categoryID uint, title, c
 
 func (s *ArticleService) DeleteMyArticle(id, authorID uint) error {
 	return s.dao.Delete(s.db, id, authorID)
+}
+
+func (s *ArticleService) AddView(articleID uint, ip string) error {
+	return s.dao.AddView(s.db, articleID, ip)
+}
+
+func (s *ArticleService) Like(articleID uint, ip string) error {
+	return s.dao.Like(s.db, articleID, ip)
 }
