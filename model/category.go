@@ -13,5 +13,6 @@ type Category struct {
 
 	// 反向关联：该分类下的文章（分类列表接口统计 articleCount 用）
 	// json:"-" 不输出文章列表，避免和 Article.Category 互相嵌套导致 JSON 循环
-	Articles []Article `gorm:"foreignKey:CategoryID" json:"-"`
+	ArticleCount int64     `gorm:"-" json:"articleCount"`
+	Articles     []Article `gorm:"foreignKey:CategoryID" json:"-"`
 }

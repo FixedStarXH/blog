@@ -17,5 +17,5 @@ func NewCategoryService(dao *dao.CategoryDAO, db *gorm.DB) *CategoryService {
 }
 
 func (s *CategoryService) GetAllCategories() ([]model.Category, error) {
-	return s.dao.FindAll(s.db)
+	return s.dao.FindAllWithCount(s.db)
 }
