@@ -44,6 +44,12 @@ func Init(r *gin.Engine) {
 		authed.GET("/auth/me", authCtl.Me)
 		authed.PUT("/auth/me", authCtl.UpdateProfile)
 		authed.PUT("/auth/password", authCtl.ChangePassword)
+		// 阶段四：我的投稿
+		authed.GET("/my/articles", articleCtl.GetMyArticles)
+		authed.POST("/my/articles", articleCtl.CreateMyArticle)
+		authed.GET("/my/articles/:id", articleCtl.GetMyArticleDetail)
+		authed.PUT("/my/articles/:id", articleCtl.UpdateMyArticle)
+		authed.DELETE("/my/articles/:id", articleCtl.DeleteMyArticle)
 	}
 
 	// 前端 SPA 静态资源托管(web/ 目录)
