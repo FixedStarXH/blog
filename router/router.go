@@ -19,19 +19,23 @@ func Init(r *gin.Engine) {
 	articleDAO := dao.NewArticleDAO()
 	categoryDAO := dao.NewCategoryDAO()
 	userDAO := dao.NewUserDAO()
+	tagDAO := dao.NewTagDAO()
 
 	articleSvc := service.NewArticleService(articleDAO, model.DB)
 	categorySvc := service.NewCategoryService(categoryDAO, model.DB)
 	authSvc := service.NewAuthService(userDAO, model.DB)
+	tagSvc := service.NewTagService(tagDAO, model.DB)
 
 	articleCtl := controller.NewArticleController(articleSvc)
 	categoryCtl := controller.NewCategoryController(categorySvc)
 	authCtl := controller.NewAuthController(authSvc)
+	tagCtl := controller.NewTagController(tagSvc)
 
 	api := r.Group("/api")
 	{
 		api.GET("/articles", articleCtl.GetArticleList)
 		api.GET("/categories", categoryCtl.GetCategoryList)
+		api.GET("/tags", tagCtl.GetTagList)
 		api.GET("/articles/hot", articleCtl.GetHotArticles)
 		api.GET("/articles/:id", articleCtl.GetArticleDetail)
 		api.PUT("/articles/:id/view", articleCtl.AddView)

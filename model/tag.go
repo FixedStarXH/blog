@@ -12,5 +12,6 @@ type Tag struct {
 
 	// 反向关联：这个标签下的文章（按标签查文章时配合中间表过滤）
 	// json:"-" 不在标签对象里输出文章列表，避免数据冗余
-	Articles []Article `gorm:"many2many:article_tags" json:"-"`
+	ArticleCount int64     `gorm:"-" json:"articleCount"`
+	Articles     []Article `gorm:"many2many:article_tags" json:"-"`
 }
