@@ -99,3 +99,10 @@ func (s *ArticleService) AddView(articleID uint, ip string) error {
 func (s *ArticleService) Like(articleID uint, ip string) error {
 	return s.dao.Like(s.db, articleID, ip)
 }
+
+func (s *ArticleService) GetHotArticles(limit int) ([]model.Article, error) {
+	if limit <= 0 || limit > 20 {
+		limit = 10
+	}
+	return s.dao.FindHot(s.db, limit)
+}

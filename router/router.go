@@ -32,6 +32,7 @@ func Init(r *gin.Engine) {
 	{
 		api.GET("/articles", articleCtl.GetArticleList)
 		api.GET("/categories", categoryCtl.GetCategoryList)
+		api.GET("/articles/hot", articleCtl.GetHotArticles)
 		api.GET("/articles/:id", articleCtl.GetArticleDetail)
 		api.PUT("/articles/:id/view", articleCtl.AddView)
 		api.PUT("/articles/:id/like", articleCtl.Like)

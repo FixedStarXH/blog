@@ -224,3 +224,16 @@ func (c *ArticleController) Like(ctx *gin.Context) {
 	}
 	utils.Success(ctx, nil)
 }
+
+func (c *ArticleController) GetHotArticles(ctx *gin.Context) {
+	limit, err := strconv.Atoi(ctx.DefaultQuery("limit", "10"))
+	if err != nil {
+		limit = 10
+	}
+	articles, err := c.service.GetHotArticles(limit)
+	if err != nil {
+		utils.Error(ctx, "获取热门文章失败")
+		return
+	}
+	utils.Success(ctx, articles)
+}

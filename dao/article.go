@@ -173,3 +173,18 @@ func (d *ArticleDAO) Like(db *gorm.DB, articleID uint, ip string) error {
 			UpdateColumn("like_count", gorm.Expr("like_count + 1")).Error
 	})
 }
+
+func (d *ArticleDAO) FindHot(db *gorm.DB, limit int) ([]model.Article, error) {
+	var articles []model.Article
+
+	err := db.Model(&model.Article{}).
+		Where("status = ?", model.ArticleStatusPublished).
+		Order("like_count desc").
+		Limit(limit).
+		Preload("Author").
+		Preload("Category").
+		Preload("Tags").
+		Find(&articles).Error
+
+	return articles, err
+}
