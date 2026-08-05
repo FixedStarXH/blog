@@ -20,16 +20,19 @@ func Init(r *gin.Engine) {
 	categoryDAO := dao.NewCategoryDAO()
 	userDAO := dao.NewUserDAO()
 	tagDAO := dao.NewTagDAO()
+	commentDAO := dao.NewCommentDAO()
 
 	articleSvc := service.NewArticleService(articleDAO, model.DB)
 	categorySvc := service.NewCategoryService(categoryDAO, model.DB)
 	authSvc := service.NewAuthService(userDAO, model.DB)
 	tagSvc := service.NewTagService(tagDAO, model.DB)
+	commentSvc := service.NewCommentService(commentDAO, model.DB)
 
 	articleCtl := controller.NewArticleController(articleSvc)
 	categoryCtl := controller.NewCategoryController(categorySvc)
 	authCtl := controller.NewAuthController(authSvc)
 	tagCtl := controller.NewTagController(tagSvc)
+	commentCtl := controller.NewCommentController(commentSvc)
 
 	api := r.Group("/api")
 	{
@@ -40,6 +43,8 @@ func Init(r *gin.Engine) {
 		api.GET("/articles/:id", articleCtl.GetArticleDetail)
 		api.PUT("/articles/:id/view", articleCtl.AddView)
 		api.PUT("/articles/:id/like", articleCtl.Like)
+		api.GET("/articles/:id/comments", commentCtl.GetComments)
+		api.POST("/articles/:id/comments", commentCtl.AddComment)
 		api.GET("/archives", articleCtl.GetArchives)
 
 		// 阶段三：用户体系
