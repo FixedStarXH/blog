@@ -110,3 +110,35 @@ func (s *ArticleService) GetHotArticles(limit int) ([]model.Article, error) {
 func (s *ArticleService) GetArchives() ([]model.Archive, error) {
 	return s.dao.FindArchives(s.db)
 }
+
+// GetArticleNav 文章导航：上一篇 + 下一篇 + 相关推荐
+func (s *ArticleService) GetArticleNav(id uint) (*model.ArticleNav, error) {
+	// ① 先查当前文章，拿到它的 CategoryID 和 CreatedAt（三个查询都靠它）
+	article, err := s.dao.FindByID(s.db, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// ② 上一篇 / 下一篇（可能为 nil，代表没有了）
+	prev, err := s.dao.FindPrev(s.db, article)
+	if err != nil {
+		return nil, err
+	}
+	next, err := s.dao.FindNext(s.db, article)
+	if err != nil {
+		return nil, err
+	}
+
+	// ③ 相关推荐：同分类热门 5 条
+	related, err := s.dao.FindRelated(s.db, article, 5)
+	if err != nil {
+		return nil, err
+	}
+
+	// ④ 组装返回
+	return &model.ArticleNav{
+		Prev:    prev,
+		Next:    next,
+		Related: related,
+	}, nil
+}

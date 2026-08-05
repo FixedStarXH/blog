@@ -226,3 +226,55 @@ func (d *ArticleDAO) FindArchives(db *gorm.DB) ([]model.Archive, error) {
 
 	return archives, nil
 }
+
+// FindPrev 上一篇：同分类、已发布、时间比当前早的最近一篇
+func (d *ArticleDAO) FindPrev(db *gorm.DB, article *model.Article) (*model.AdjacentArticle, error) {
+	var prev model.AdjacentArticle
+	// result 接收整个查询结果（不只是 Error）
+	result := db.Model(&model.Article{}).
+		Select("id, title").
+		Where("category_id = ? AND status = ? AND created_at < ?", article.CategoryID, model.ArticleStatusPublished, article.CreatedAt).
+		Order("created_at desc").
+		Limit(1).
+		Scan(&prev)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	// RowsAffected = 实际查到的行数；0 = 没有上一篇 → 返回 nil（JSON 输出 null）
+	if result.RowsAffected == 0 {
+		return nil, nil
+	}
+	return &prev, nil
+}
+
+// FindNext 下一篇：同分类、已发布、时间比当前晚的最近一篇
+func (d *ArticleDAO) FindNext(db *gorm.DB, article *model.Article) (*model.AdjacentArticle, error) {
+	var next model.AdjacentArticle
+	result := db.Model(&model.Article{}).
+		Select("id, title").
+		Where("category_id = ? AND status = ? AND created_at > ?", article.CategoryID, model.ArticleStatusPublished, article.CreatedAt). // ① > 方向反了
+		Order("created_at asc").                                                                                                         // ② asc 升序
+		Limit(1).
+		Scan(&next)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil, nil
+	}
+	return &next, nil
+}
+
+// FindRelated 相关推荐：同分类的其他文章，按浏览量倒序
+func (d *ArticleDAO) FindRelated(db *gorm.DB, article *model.Article, limit int) ([]model.Article, error) {
+	var related []model.Article
+	err := db.Model(&model.Article{}).
+		Where("category_id = ? AND id != ? AND status = ?", article.CategoryID, article.ID, model.ArticleStatusPublished).
+		Order("view_count desc").
+		Limit(limit).
+		Preload("Author").
+		Preload("Category").
+		Preload("Tags").
+		Find(&related).Error
+	return related, err
+}

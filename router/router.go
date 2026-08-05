@@ -46,6 +46,7 @@ func Init(r *gin.Engine) {
 		api.GET("/articles/:id", articleCtl.GetArticleDetail)
 		api.PUT("/articles/:id/view", articleCtl.AddView)
 		api.PUT("/articles/:id/like", articleCtl.Like)
+		api.GET("/articles/:id/nav", articleCtl.GetArticleNav)
 		api.GET("/articles/:id/comments", commentCtl.GetComments)
 		api.POST("/articles/:id/comments", commentCtl.AddComment)
 		api.GET("/archives", articleCtl.GetArchives)

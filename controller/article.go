@@ -246,3 +246,24 @@ func (c *ArticleController) GetArchives(ctx *gin.Context) {
 	}
 	utils.Success(ctx, archives)
 }
+
+// GetArticleNav 文章导航（上一篇/下一篇/相关推荐）
+// GET /api/articles/:id/nav
+func (c *ArticleController) GetArticleNav(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
+	if err != nil {
+		utils.Fail(ctx, "无效的文章ID")
+		return
+	}
+
+	nav, err := c.service.GetArticleNav(uint(id))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			utils.Fail(ctx, "文章不存在")
+			return
+		}
+		utils.Error(ctx, "获取文章导航失败")
+		return
+	}
+	utils.Success(ctx, nav)
+}
