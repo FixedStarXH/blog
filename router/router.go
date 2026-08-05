@@ -50,6 +50,7 @@ func Init(r *gin.Engine) {
 		api.POST("/articles/:id/comments", commentCtl.AddComment)
 		api.GET("/archives", articleCtl.GetArchives)
 		api.GET("/settings", settingCtl.GetSiteSettings)
+		api.GET("/quote", settingCtl.GetDailyQuote)
 
 		// 阶段三：用户体系
 		// 注册/登录不需要登录

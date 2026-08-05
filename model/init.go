@@ -133,6 +133,7 @@ func initTestData() {
 	// 7. 站点配置（settings KV 表：站点标题 / 描述）
 	DB.Create(&Setting{K: "site_title", V: "Lumi 博客"})
 	DB.Create(&Setting{K: "site_description", V: "Go 学习与技术分享"})
+	DB.Create(&Setting{K: "daily_quotes", V: "代码是写给未来的人看的\n纸上得来终觉浅，绝知此事要躬行\n学而不思则罔，思而不学则殆"})
 
 	fmt.Println("测试数据已创建（三角色 admin/editor/user1，4分类，4标签，1专栏，4篇文章含1篇待审核）")
 }
