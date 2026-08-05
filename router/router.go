@@ -21,18 +21,21 @@ func Init(r *gin.Engine) {
 	userDAO := dao.NewUserDAO()
 	tagDAO := dao.NewTagDAO()
 	commentDAO := dao.NewCommentDAO()
+	settingDAO := dao.NewSettingDAO()
 
 	articleSvc := service.NewArticleService(articleDAO, model.DB)
 	categorySvc := service.NewCategoryService(categoryDAO, model.DB)
 	authSvc := service.NewAuthService(userDAO, model.DB)
 	tagSvc := service.NewTagService(tagDAO, model.DB)
 	commentSvc := service.NewCommentService(commentDAO, model.DB)
+	settingSvc := service.NewSettingService(settingDAO, model.DB)
 
 	articleCtl := controller.NewArticleController(articleSvc)
 	categoryCtl := controller.NewCategoryController(categorySvc)
 	authCtl := controller.NewAuthController(authSvc)
 	tagCtl := controller.NewTagController(tagSvc)
 	commentCtl := controller.NewCommentController(commentSvc)
+	settingCtl := controller.NewSettingController(settingSvc)
 
 	api := r.Group("/api")
 	{
@@ -46,6 +49,7 @@ func Init(r *gin.Engine) {
 		api.GET("/articles/:id/comments", commentCtl.GetComments)
 		api.POST("/articles/:id/comments", commentCtl.AddComment)
 		api.GET("/archives", articleCtl.GetArchives)
+		api.GET("/settings", settingCtl.GetSiteSettings)
 
 		// 阶段三：用户体系
 		// 注册/登录不需要登录
