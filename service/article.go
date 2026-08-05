@@ -106,3 +106,7 @@ func (s *ArticleService) GetHotArticles(limit int) ([]model.Article, error) {
 	}
 	return s.dao.FindHot(s.db, limit)
 }
+
+func (s *ArticleService) GetArchives() ([]model.Archive, error) {
+	return s.dao.FindArchives(s.db)
+}

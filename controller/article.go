@@ -237,3 +237,12 @@ func (c *ArticleController) GetHotArticles(ctx *gin.Context) {
 	}
 	utils.Success(ctx, articles)
 }
+
+func (c *ArticleController) GetArchives(ctx *gin.Context) {
+	archives, err := c.service.GetArchives()
+	if err != nil {
+		utils.Error(ctx, "获取归档失败")
+		return
+	}
+	utils.Success(ctx, archives)
+}

@@ -40,6 +40,7 @@ func Init(r *gin.Engine) {
 		api.GET("/articles/:id", articleCtl.GetArticleDetail)
 		api.PUT("/articles/:id/view", articleCtl.AddView)
 		api.PUT("/articles/:id/like", articleCtl.Like)
+		api.GET("/archives", articleCtl.GetArchives)
 
 		// 阶段三：用户体系
 		// 注册/登录不需要登录

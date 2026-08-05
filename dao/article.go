@@ -3,6 +3,7 @@ package dao
 import (
 	"blog-system/model"
 	"errors"
+	"sort"
 	"time"
 
 	"gorm.io/gorm"
@@ -187,4 +188,41 @@ func (d *ArticleDAO) FindHot(db *gorm.DB, limit int) ([]model.Article, error) {
 		Find(&articles).Error
 
 	return articles, err
+}
+
+// FindArchives 时间归档：按月份分组，返回月份倒序
+func (d *ArticleDAO) FindArchives(db *gorm.DB) ([]model.Archive, error) {
+	//查全部已发布文章（带作者/分类/标签，Preload）
+	var articles []model.Article
+	err := db.Model(&model.Article{}).
+		Where("status = ?", model.ArticleStatusPublished).
+		Order("created_at desc").
+		Preload("Author").
+		Preload("Category").
+		Preload("Tags").
+		Find(&articles).Error
+	if err != nil {
+		return nil, err
+	}
+
+	//用 map 按月份分组
+	groups := make(map[string][]model.Article)
+
+	for i := range articles {
+		month := articles[i].CreatedAt.Format("2006-01")
+		groups[month] = append(groups[month], articles[i])
+	}
+	archives := make([]model.Archive, 0, len(groups))
+	for month, articleList := range groups {
+		archives = append(archives, model.Archive{
+			Month:    month,
+			Count:    len(articleList),
+			Articles: articleList,
+		})
+	}
+	sort.Slice(archives, func(i, j int) bool {
+		return archives[i].Month > archives[j].Month
+	})
+
+	return archives, nil
 }
