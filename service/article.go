@@ -142,3 +142,24 @@ func (s *ArticleService) GetArticleNav(id uint) (*model.ArticleNav, error) {
 		Related: related,
 	}, nil
 }
+
+// GetAdminArticles 后台文章列表（编辑+）
+func (s *ArticleService) GetAdminArticles(status, page, pageSize int) ([]model.Article, int64, error) {
+	if pageSize <= 0 || pageSize > 50 {
+		pageSize = 10
+	}
+	if page <= 0 {
+		page = 1
+	}
+	return s.dao.FindAll(s.db, status, page, pageSize)
+}
+
+// ApproveArticle 通过审核：状态改已发布，清空驳回原因
+func (s *ArticleService) ApproveArticle(id uint) error {
+	return s.dao.UpdateStatus(s.db, id, model.ArticleStatusPublished, "")
+}
+
+// RejectArticle 驳回：状态改已驳回，写入原因
+func (s *ArticleService) RejectArticle(id uint, reason string) error {
+	return s.dao.UpdateStatus(s.db, id, model.ArticleStatusRejected, reason)
+}

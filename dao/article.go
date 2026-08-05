@@ -278,3 +278,36 @@ func (d *ArticleDAO) FindRelated(db *gorm.DB, article *model.Article, limit int)
 		Find(&related).Error
 	return related, err
 }
+
+// FindAll 后台文章管理：按状态筛选 + 分页（不校验作者，审核员可见所有投稿）
+func (d *ArticleDAO) FindAll(db *gorm.DB, status int, page, pageSize int) ([]model.Article, int64, error) {
+	var articles []model.Article
+	var total int64
+
+	query := db.Model(&model.Article{})
+	if status >= 0 {
+		query = query.Where("status = ?", status)
+	}
+	query.Count(&total)
+
+	err := query.
+		Preload("Author").
+		Preload("Category").
+		Preload("Tags").
+		Order("created_at desc").
+		Offset((page - 1) * pageSize).
+		Limit(pageSize).
+		Find(&articles).Error
+
+	return articles, total, err
+}
+
+// UpdateStatus 后台审核：直接改状态（不校验作者；驳回时写原因）
+func (d *ArticleDAO) UpdateStatus(db *gorm.DB, id uint, status int, rejectReason string) error {
+	return db.Model(&model.Article{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"status":        status,
+			"reject_reason": rejectReason, // 通过时传空串，驳回时传原因
+		}).Error
+}

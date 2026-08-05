@@ -69,6 +69,12 @@ func Init(r *gin.Engine) {
 		authed.GET("/my/articles/:id", articleCtl.GetMyArticleDetail)
 		authed.PUT("/my/articles/:id", articleCtl.UpdateMyArticle)
 		authed.DELETE("/my/articles/:id", articleCtl.DeleteMyArticle)
+
+		// 后台管理组：编辑及以上（RBAC 双锁：先登录 401，再验角色 403）
+		admin := api.Group("/admin", middleware.AuthRequired(), middleware.RequireRole(model.RoleEditor))
+		admin.GET("/articles", articleCtl.GetAdminArticles)
+		admin.PUT("/articles/:id/approve", articleCtl.ApproveArticle)
+		admin.PUT("/articles/:id/reject", articleCtl.RejectArticle)
 	}
 
 	// 前端 SPA 静态资源托管(web/ 目录)

@@ -267,3 +267,58 @@ func (c *ArticleController) GetArticleNav(ctx *gin.Context) {
 	}
 	utils.Success(ctx, nav)
 }
+
+// 驳回请求体：原因必填
+type rejectArticleRequest struct {
+	Reason string `json:"reason" binding:"required"`
+}
+
+// GetAdminArticles 后台文章列表（编辑+）
+// GET /api/admin/articles?status=2&page=1&pageSize=10
+func (c *ArticleController) GetAdminArticles(ctx *gin.Context) {
+	status, _ := strconv.Atoi(ctx.DefaultQuery("status", "-1"))
+	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "10"))
+
+	articles, total, err := c.service.GetAdminArticles(status, page, pageSize)
+	if err != nil {
+		utils.Error(ctx, "获取文章列表失败")
+		return
+	}
+	utils.Success(ctx, gin.H{"list": articles, "total": total, "page": page, "pageSize": pageSize})
+}
+
+// ApproveArticle 审核通过
+// PUT /api/admin/articles/:id/approve
+func (c *ArticleController) ApproveArticle(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
+	if err != nil {
+		utils.Fail(ctx, "无效的文章ID")
+		return
+	}
+	if err := c.service.ApproveArticle(uint(id)); err != nil {
+		utils.Error(ctx, "审核操作失败")
+		return
+	}
+	utils.Success(ctx, nil)
+}
+
+// RejectArticle 驳回（原因必填）
+// PUT /api/admin/articles/:id/reject
+func (c *ArticleController) RejectArticle(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
+	if err != nil {
+		utils.Fail(ctx, "无效的文章ID")
+		return
+	}
+	var req rejectArticleRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		utils.Fail(ctx, "参数错误："+err.Error())
+		return
+	}
+	if err := c.service.RejectArticle(uint(id), req.Reason); err != nil {
+		utils.Error(ctx, "审核操作失败")
+		return
+	}
+	utils.Success(ctx, nil)
+}
