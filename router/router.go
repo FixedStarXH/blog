@@ -90,6 +90,11 @@ func Init(r *gin.Engine) {
 		admin.POST("/tags", tagCtl.CreateTag)
 		admin.PUT("/tags/:id", tagCtl.UpdateTag)
 		admin.DELETE("/tags/:id", tagCtl.DeleteTag)
+		// 评论管理（编辑+）
+		admin.GET("/comments", commentCtl.GetAdminComments)
+		admin.PUT("/comments/:id/approve", commentCtl.ApproveComment)
+		admin.PUT("/comments/:id/reject", commentCtl.RejectComment)
+		admin.DELETE("/comments/:id", commentCtl.DeleteComment)
 	}
 
 	// 前端 SPA 静态资源托管(web/ 目录)
