@@ -79,6 +79,8 @@ func Init(r *gin.Engine) {
 		admin.GET("/articles", articleCtl.GetAdminArticles)
 		admin.PUT("/articles/:id/approve", articleCtl.ApproveArticle)
 		admin.PUT("/articles/:id/reject", articleCtl.RejectArticle)
+		// 站点设置（编辑+）
+		admin.PUT("/settings", settingCtl.UpdateSettings)
 		// admin 组：AuthRequired(401) → RequireRole(Editor)(403)
 		// 子组再叠 RequireRole(Admin)：编辑 role=2 < 3 也被拦
 		adminUsers := admin.Group("/users", middleware.RequireRole(model.RoleAdmin))

@@ -2,6 +2,7 @@ package service
 
 import (
 	"blog-system/dao"
+	"errors"
 	"math/rand/v2"
 
 	"gorm.io/gorm"
@@ -29,4 +30,25 @@ func (s *SettingService) GetDailyQuote() (string, error) {
 	}
 	// rand.IntN(3) 返回 0/1/2 的随机整数，正好当切片下标
 	return quotes[rand.IntN(len(quotes))], nil
+}
+
+// 允许修改的设置键（白名单：防止往 KV 表乱写 key 污染数据）
+var allowedSettingKeys = map[string]bool{
+	"site_title":       true,
+	"site_description": true,
+	"daily_quotes":     true,
+}
+
+// UpdateSettings 更新站点设置：只保留白名单内的键，其余忽略
+func (s *SettingService) UpdateSettings(kv map[string]string) error {
+	filtered := make(map[string]string)
+	for k, v := range kv {
+		if allowedSettingKeys[k] {
+			filtered[k] = v
+		}
+	}
+	if len(filtered) == 0 {
+		return errors.New("没有可更新的设置项")
+	}
+	return s.dao.Upsert(s.db, filtered)
 }

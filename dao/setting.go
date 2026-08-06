@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type SettingDAO struct{}
@@ -33,4 +34,17 @@ func (d *SettingDAO) GetQuotes(db *gorm.DB) ([]string, error) {
 	}
 	// 按换行拆分："a\nb\nc" → ["a", "b", "c"]
 	return strings.Split(setting.V, "\n"), nil
+}
+
+// Upsert 批量保存设置：K 是主键，存在则更新 V，不存在则插入（ON DUPLICATE KEY UPDATE）
+func (d *SettingDAO) Upsert(db *gorm.DB, kv map[string]string) error {
+	for k, v := range kv {
+		s := model.Setting{K: k, V: v}
+		if err := db.Clauses(clause.OnConflict{
+			UpdateAll: true, // 主键冲突时更新所有列（这里就是 V）
+		}).Create(&s).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
