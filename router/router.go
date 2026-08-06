@@ -31,6 +31,8 @@ func Init(r *gin.Engine) {
 	settingSvc := service.NewSettingService(settingDAO, model.DB)
 
 	articleCtl := controller.NewArticleController(articleSvc)
+	userSvc := service.NewUserService(userDAO, model.DB)
+	userCtl := controller.NewUserController(userSvc)
 	categoryCtl := controller.NewCategoryController(categorySvc)
 	authCtl := controller.NewAuthController(authSvc)
 	tagCtl := controller.NewTagController(tagSvc)
@@ -75,6 +77,12 @@ func Init(r *gin.Engine) {
 		admin.GET("/articles", articleCtl.GetAdminArticles)
 		admin.PUT("/articles/:id/approve", articleCtl.ApproveArticle)
 		admin.PUT("/articles/:id/reject", articleCtl.RejectArticle)
+		// admin 组：AuthRequired(401) → RequireRole(Editor)(403)
+		// 子组再叠 RequireRole(Admin)：编辑 role=2 < 3 也被拦
+		adminUsers := admin.Group("/users", middleware.RequireRole(model.RoleAdmin))
+		adminUsers.GET("", userCtl.GetAdminUsers)
+		adminUsers.PUT("/:id/status", userCtl.UpdateUserStatus)
+		adminUsers.PUT("/:id/role", userCtl.UpdateUserRole)
 	}
 
 	// 前端 SPA 静态资源托管(web/ 目录)
