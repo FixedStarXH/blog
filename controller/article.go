@@ -297,7 +297,8 @@ func (c *ArticleController) ApproveArticle(ctx *gin.Context) {
 		return
 	}
 	if err := c.service.ApproveArticle(uint(id)); err != nil {
-		utils.Error(ctx, "审核操作失败")
+		// 业务拒绝（文章不存在等）用 Fail（code 400），不用 Error（500 留给系统异常）
+		utils.Fail(ctx, err.Error())
 		return
 	}
 	utils.Success(ctx, nil)
@@ -317,7 +318,8 @@ func (c *ArticleController) RejectArticle(ctx *gin.Context) {
 		return
 	}
 	if err := c.service.RejectArticle(uint(id), req.Reason); err != nil {
-		utils.Error(ctx, "审核操作失败")
+		// 业务拒绝（文章不存在等）用 Fail（code 400），不用 Error（500 留给系统异常）
+		utils.Fail(ctx, err.Error())
 		return
 	}
 	utils.Success(ctx, nil)

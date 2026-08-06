@@ -83,6 +83,13 @@ func Init(r *gin.Engine) {
 		adminUsers.GET("", userCtl.GetAdminUsers)
 		adminUsers.PUT("/:id/status", userCtl.UpdateUserStatus)
 		adminUsers.PUT("/:id/role", userCtl.UpdateUserRole)
+		// 分类/标签管理（编辑+，与文章审核同级权限）
+		admin.POST("/categories", categoryCtl.CreateCategory)
+		admin.PUT("/categories/:id", categoryCtl.UpdateCategory)
+		admin.DELETE("/categories/:id", categoryCtl.DeleteCategory)
+		admin.POST("/tags", tagCtl.CreateTag)
+		admin.PUT("/tags/:id", tagCtl.UpdateTag)
+		admin.DELETE("/tags/:id", tagCtl.DeleteTag)
 	}
 
 	// 前端 SPA 静态资源托管(web/ 目录)

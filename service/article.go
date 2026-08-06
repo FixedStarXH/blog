@@ -1,6 +1,8 @@
 package service
 
 import (
+	"errors"
+
 	"blog-system/dao"
 	"blog-system/model"
 
@@ -154,12 +156,25 @@ func (s *ArticleService) GetAdminArticles(status, page, pageSize int) ([]model.A
 	return s.dao.FindAll(s.db, status, page, pageSize)
 }
 
-// ApproveArticle 通过审核：状态改已发布，清空驳回原因
+// ApproveArticle 通过审核：先确认文章存在（GORM 的 Updates 查不到行不报错，必须自己判），
+// 再状态改已发布、清空驳回原因
 func (s *ArticleService) ApproveArticle(id uint) error {
+	if _, err := s.dao.FindByID(s.db, id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("文章不存在")
+		}
+		return err
+	}
 	return s.dao.UpdateStatus(s.db, id, model.ArticleStatusPublished, "")
 }
 
-// RejectArticle 驳回：状态改已驳回，写入原因
+// RejectArticle 驳回：先确认文章存在，再状态改已驳回、写入原因
 func (s *ArticleService) RejectArticle(id uint, reason string) error {
+	if _, err := s.dao.FindByID(s.db, id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("文章不存在")
+		}
+		return err
+	}
 	return s.dao.UpdateStatus(s.db, id, model.ArticleStatusRejected, reason)
 }
