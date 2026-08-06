@@ -7,27 +7,30 @@ import (
 	"blog-system/utils"
 	"errors"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
 type createArticleRequest struct {
-	Title      string `json:"title" binding:"required"`
-	Content    string `json:"content" binding:"required"`
-	Summary    string `json:"summary"`
-	CoverImage string `json:"coverImage"`
-	CategoryID uint   `json:"categoryId" binding:"required"`
-	TagIDs     []uint `json:"tagIds"`
+	Title      string     `json:"title" binding:"required"`
+	Content    string     `json:"content" binding:"required"`
+	Summary    string     `json:"summary"`
+	CoverImage string     `json:"coverImage"`
+	PublishAt  *time.Time `json:"publishAt"` // 可空；设未来时间=定时发布，不传=审核通过立即发布
+	CategoryID uint       `json:"categoryId" binding:"required"`
+	TagIDs     []uint     `json:"tagIds"`
 }
 
 type updateArticleRequest struct {
-	Title      string `json:"title" binding:"required"`
-	Content    string `json:"content" binding:"required"`
-	Summary    string `json:"summary"`
-	CoverImage string `json:"coverImage"`
-	CategoryID uint   `json:"categoryId" binding:"required"`
-	TagIDs     []uint `json:"tagIds"`
+	Title      string     `json:"title" binding:"required"`
+	Content    string     `json:"content" binding:"required"`
+	Summary    string     `json:"summary"`
+	CoverImage string     `json:"coverImage"`
+	PublishAt  *time.Time `json:"publishAt"` // 可空；修改排期时间
+	CategoryID uint       `json:"categoryId" binding:"required"`
+	TagIDs     []uint     `json:"tagIds"`
 }
 
 type ArticleController struct {
@@ -105,7 +108,7 @@ func (c *ArticleController) CreateMyArticle(ctx *gin.Context) {
 	}
 	userID := middleware.GetUserID(ctx)
 
-	article, err := c.service.CreateArticle(userID, req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.TagIDs)
+	article, err := c.service.CreateArticle(userID, req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.PublishAt, req.TagIDs)
 	if err != nil {
 		utils.Fail(ctx, err.Error())
 		return
@@ -154,7 +157,7 @@ func (c *ArticleController) UpdateMyArticle(ctx *gin.Context) {
 	}
 	userID := middleware.GetUserID(ctx)
 
-	if err := c.service.UpdateMyArticle(uint(id), userID, req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.TagIDs); err != nil {
+	if err := c.service.UpdateMyArticle(uint(id), userID, req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.PublishAt, req.TagIDs); err != nil {
 		if errors.Is(err, dao.ErrNotAuthor) {
 			utils.Forbidden(ctx, "无权修改该文章")
 			return

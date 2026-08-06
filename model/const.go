@@ -52,6 +52,7 @@ const (
 	ArticleStatusPublished = 1 // 已发布：前台可见
 	ArticleStatusPending   = 2 // 待审核：投稿后等待编辑审核
 	ArticleStatusRejected  = 3 // 已驳回：原因存 RejectReason，作者可修改重提
+	ArticleStatusScheduled = 4 // 已排期：PublishAt 设了未来时间，等定时任务自动转发布
 )
 
 // ---------------- 评论状态 ----------------

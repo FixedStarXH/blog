@@ -7,6 +7,7 @@ import (
 	"blog-system/config"
 	"blog-system/model"
 	"blog-system/router"
+	"blog-system/scheduler"
 
 	"github.com/gin-gonic/gin"
 )
@@ -20,6 +21,8 @@ func main() {
 		log.Fatalf("初始化数据库失败:%v", err)
 	}
 	fmt.Println("数据库连接成功，表已自动创建")
+
+	scheduler.StartPublishScheduler(model.DB)
 
 	r := gin.Default()
 

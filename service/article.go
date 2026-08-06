@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"time"
 
 	"blog-system/dao"
 	"blog-system/model"
@@ -33,7 +34,7 @@ func (s *ArticleService) GetArticleByID(id uint) (*model.Article, error) {
 	return s.dao.FindByID(s.db, id)
 }
 
-func (s *ArticleService) CreateArticle(authorID, categoryID uint, title, content, summary, coverImage string, tagIDs []uint) (*model.Article, error) {
+func (s *ArticleService) CreateArticle(authorID, categoryID uint, title, content, summary, coverImage string, publishAt *time.Time, tagIDs []uint) (*model.Article, error) {
 	tags := make([]model.Tag, 0, len(tagIDs))
 	for _, id := range tagIDs {
 		tags = append(tags, model.Tag{BaseModel: model.BaseModel{ID: id}})
@@ -43,6 +44,7 @@ func (s *ArticleService) CreateArticle(authorID, categoryID uint, title, content
 		Content:    content,
 		Summary:    summary,
 		CoverImage: coverImage,
+		PublishAt:  publishAt, // 作者可设定时发布；nil=不排期，审核通过立即发布
 		Status:     model.ArticleStatusPending,
 		AuthorID:   authorID,
 		CategoryID: categoryID,
@@ -69,13 +71,14 @@ func (s *ArticleService) GetMyArticleDetail(id, authorID uint) (*model.Article, 
 	return s.dao.FindByIDAndAuthor(s.db, id, authorID)
 }
 
-func (s *ArticleService) UpdateMyArticle(id, authorID, categoryID uint, title, content, summary, coverImage string, tagIDs []uint) error {
+func (s *ArticleService) UpdateMyArticle(id, authorID, categoryID uint, title, content, summary, coverImage string, publishAt *time.Time, tagIDs []uint) error {
 	updates := map[string]interface{}{
 		"title":       title,
 		"content":     content,
 		"summary":     summary,
 		"cover_image": coverImage,
 		"category_id": categoryID,
+		"publish_at":  publishAt, // 修改排期时间；nil=不排期
 	}
 	if err := s.dao.Update(s.db, id, authorID, updates); err != nil {
 		return err
@@ -156,15 +159,21 @@ func (s *ArticleService) GetAdminArticles(status, page, pageSize int) ([]model.A
 	return s.dao.FindAll(s.db, status, page, pageSize)
 }
 
-// ApproveArticle 通过审核：先确认文章存在（GORM 的 Updates 查不到行不报错，必须自己判），
-// 再状态改已发布、清空驳回原因
+// ApproveArticle 通过审核：先确认文章存在，
+// 再判断：设了未来 PublishAt → 转已排期(4) 等定时任务；否则立即发布(1)
 func (s *ArticleService) ApproveArticle(id uint) error {
-	if _, err := s.dao.FindByID(s.db, id); err != nil {
+	article, err := s.dao.FindByID(s.db, id)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("文章不存在")
 		}
 		return err
 	}
+	// 定时发布：PublishAt 是未来时间 → 已排期，由 scheduler 每 30 秒扫描后自动转发布
+	if article.PublishAt != nil && article.PublishAt.After(time.Now()) {
+		return s.dao.UpdateStatus(s.db, id, model.ArticleStatusScheduled, "")
+	}
+	// 没设时间或时间已过 → 立即发布
 	return s.dao.UpdateStatus(s.db, id, model.ArticleStatusPublished, "")
 }
 

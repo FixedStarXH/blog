@@ -311,3 +311,13 @@ func (d *ArticleDAO) UpdateStatus(db *gorm.DB, id uint, status int, rejectReason
 			"reject_reason": rejectReason, // 通过时传空串，驳回时传原因
 		}).Error
 }
+
+// PublishScheduled 定时任务核心：把已到期的排期文章转已发布
+// 条件：status=4(已排期) 且 publish_at 已到（<= 现在）
+func (d *ArticleDAO) PublishScheduled(db *gorm.DB) (int64, error) {
+	result := db.Model(&model.Article{}).
+		Where("status = ? AND publish_at IS NOT NULL AND publish_at <= ?",
+			model.ArticleStatusScheduled, time.Now()).
+		Update("status", model.ArticleStatusPublished)
+	return result.RowsAffected, result.Error
+}
