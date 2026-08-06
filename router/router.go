@@ -38,6 +38,7 @@ func Init(r *gin.Engine) {
 	tagCtl := controller.NewTagController(tagSvc)
 	commentCtl := controller.NewCommentController(commentSvc)
 	settingCtl := controller.NewSettingController(settingSvc)
+	uploadCtl := controller.NewUploadController()
 
 	api := r.Group("/api")
 	{
@@ -71,6 +72,7 @@ func Init(r *gin.Engine) {
 		authed.GET("/my/articles/:id", articleCtl.GetMyArticleDetail)
 		authed.PUT("/my/articles/:id", articleCtl.UpdateMyArticle)
 		authed.DELETE("/my/articles/:id", articleCtl.DeleteMyArticle)
+		authed.POST("/upload", uploadCtl.UploadImage)
 
 		// 后台管理组：编辑及以上（RBAC 双锁：先登录 401，再验角色 403）
 		admin := api.Group("/admin", middleware.AuthRequired(), middleware.RequireRole(model.RoleEditor))
