@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"blog-system/config"
+	"blog-system/middleware"
 	"blog-system/model"
 	"blog-system/router"
 	"blog-system/scheduler"
@@ -22,9 +23,16 @@ func main() {
 	}
 	fmt.Println("数据库连接成功，表已自动创建")
 
+	// 初始化结构化日志（slog：控制台 + logs/app.log 双输出）
+	if err := middleware.InitLogger(); err != nil {
+		log.Fatalf("初始化日志失败:%v", err)
+	}
+
 	scheduler.StartPublishScheduler(model.DB)
 
-	r := gin.Default()
+	// gin.New() 不带默认 logger（我们用 slog），只留 Recovery 兜底防 panic
+	r := gin.New()
+	r.Use(gin.Recovery())
 
 	router.Init(r)
 

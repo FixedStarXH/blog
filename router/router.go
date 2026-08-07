@@ -16,6 +16,9 @@ import (
 )
 
 func Init(r *gin.Engine) {
+	// 请求日志中间件（洋葱最外层：所有请求都会先经过它）
+	r.Use(middleware.RequestLogger())
+
 	articleDAO := dao.NewArticleDAO()
 	categoryDAO := dao.NewCategoryDAO()
 	userDAO := dao.NewUserDAO()
