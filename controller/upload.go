@@ -8,9 +8,13 @@ import (
 	"strings"
 	"time"
 
+	"blog-system/dao"
+	"blog-system/middleware"
+	"blog-system/model"
 	"blog-system/utils"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // 允许的图片扩展名（白名单，防上传 exe/php 等可执行文件）
@@ -24,14 +28,17 @@ var allowedExt = map[string]bool{
 
 const maxUploadSize = 5 << 20 // 5MB（5 << 20 = 5 * 1024 * 1024 字节）
 
-type UploadController struct{}
-
-func NewUploadController() *UploadController {
-	return &UploadController{}
+type UploadController struct {
+	imageDAO *dao.ImageDAO // 上传成功后记录到图库表（后台图库管理用）
+	db       *gorm.DB
 }
 
-// UploadImage 图片上传（登录用户可用，写文章插图是作者功能）
-// POST /api/upload   Body: form-data 的 file 字段放图片
+func NewUploadController(imageDAO *dao.ImageDAO, db *gorm.DB) *UploadController {
+	return &UploadController{imageDAO: imageDAO, db: db}
+}
+
+// UploadImage 图片上传（登录用户可用）
+// POST /api/upload 或 POST /api/admin/upload  Body: form-data 的 file 字段放图片
 func (c *UploadController) UploadImage(ctx *gin.Context) {
 	// ① 取文件：form-data 里字段名 "file"
 	file, err := ctx.FormFile("file")
@@ -66,8 +73,18 @@ func (c *UploadController) UploadImage(ctx *gin.Context) {
 		return
 	}
 
-	// ⑤ 返回访问 URL：/uploads 已被 r.Static 映射到本地目录
-	utils.Success(ctx, gin.H{"url": "/uploads/" + newName})
+	// ⑤ 记录到图库表（元信息入库，后台图库页靠它列出所有图）
+	url := "/uploads/" + newName
+	_ = c.imageDAO.Create(c.db, &model.Image{
+		Name:       file.Filename,                        // 原始文件名（展示用）
+		URL:        url,                                  // 访问路径
+		Size:       file.Size,                            // 字节大小
+		Ext:        strings.TrimPrefix(ext, "."),         // 去掉点的扩展名
+		UploaderID: middleware.GetUserID(ctx),            // 上传者（admin 组必登录，可拿 ID）
+	})
+
+	// ⑥ 返回访问 URL：/uploads 已被 r.Static 映射到本地目录
+	utils.Success(ctx, gin.H{"url": url})
 }
 
 // randomString 生成 n 位随机小写字母+数字（math/rand/v2 自带随机源，不用手动 seed）

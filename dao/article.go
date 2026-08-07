@@ -190,7 +190,8 @@ func (d *ArticleDAO) FindHot(db *gorm.DB, limit int) ([]model.Article, error) {
 	return articles, err
 }
 
-// FindArchives 时间归档：按月份分组，返回月份倒序
+// FindArchives 时间归档：按年份分组，返回年份倒序
+// 前端契约（archive.html）：[{year, articles}]，所以按年分组而不是按月
 func (d *ArticleDAO) FindArchives(db *gorm.DB) ([]model.Archive, error) {
 	//查全部已发布文章（带作者/分类/标签，Preload）
 	var articles []model.Article
@@ -205,23 +206,23 @@ func (d *ArticleDAO) FindArchives(db *gorm.DB) ([]model.Archive, error) {
 		return nil, err
 	}
 
-	//用 map 按月份分组
+	//用 map 按年份分组
 	groups := make(map[string][]model.Article)
 
 	for i := range articles {
-		month := articles[i].CreatedAt.Format("2006-01")
-		groups[month] = append(groups[month], articles[i])
+		year := articles[i].CreatedAt.Format("2006")
+		groups[year] = append(groups[year], articles[i])
 	}
 	archives := make([]model.Archive, 0, len(groups))
-	for month, articleList := range groups {
+	for year, articleList := range groups {
 		archives = append(archives, model.Archive{
-			Month:    month,
+			Year:     year,
 			Count:    len(articleList),
 			Articles: articleList,
 		})
 	}
 	sort.Slice(archives, func(i, j int) bool {
-		return archives[i].Month > archives[j].Month
+		return archives[i].Year > archives[j].Year
 	})
 
 	return archives, nil
@@ -310,6 +311,12 @@ func (d *ArticleDAO) UpdateStatus(db *gorm.DB, id uint, status int, rejectReason
 			"status":        status,
 			"reject_reason": rejectReason, // 通过时传空串，驳回时传原因
 		}).Error
+}
+
+// UpdateByID 按 ID 直接更新（后台文章编辑用，不校验作者）
+// 注意：updates 是 map 才能更新"零值"（如 is_top=false），struct 的零值会被 GORM 忽略
+func (d *ArticleDAO) UpdateByID(db *gorm.DB, id uint, updates map[string]interface{}) error {
+	return db.Model(&model.Article{}).Where("id = ?", id).Updates(updates).Error
 }
 
 // PublishScheduled 定时任务核心：把已到期的排期文章转已发布

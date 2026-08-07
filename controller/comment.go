@@ -37,7 +37,8 @@ func (c *CommentController) GetComments(ctx *gin.Context) {
 		utils.Error(ctx, "获取评论失败")
 		return
 	}
-	utils.Success(ctx, comments)
+	// 前端详情页需要显示"共 N 条"，统一返回分页结构（评论不分页，pageSize 给大值即可）
+	utils.Success(ctx, gin.H{"list": comments, "total": len(comments)})
 }
 
 // AddComment 发表评论（游客可评，不需要登录）
@@ -118,6 +119,52 @@ func (c *CommentController) DeleteComment(ctx *gin.Context) {
 		return
 	}
 	if err := c.service.DeleteComment(uint(id)); err != nil {
+		utils.Fail(ctx, err.Error())
+		return
+	}
+	utils.Success(ctx, nil)
+}
+
+// commentStatusRequest 后台通用改状态：status 0待审 1通过 2驳回
+type commentStatusRequest struct {
+	Status int `json:"status" binding:"required"`
+}
+
+// UpdateCommentStatus 后台通用改状态（前端 comments.html 契约）
+// PUT /api/admin/comments/:id/status  Body: {"status":1}
+func (c *CommentController) UpdateCommentStatus(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
+	if err != nil {
+		utils.Fail(ctx, "无效的评论ID")
+		return
+	}
+	var req commentStatusRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		utils.Fail(ctx, "参数错误："+err.Error())
+		return
+	}
+	if err := c.service.SetCommentStatus(uint(id), req.Status); err != nil {
+		utils.Fail(ctx, err.Error())
+		return
+	}
+	utils.Success(ctx, nil)
+}
+
+// batchCommentRequest 批量操作：ids 评论ID数组，action: approve 通过 / delete 删除
+type batchCommentRequest struct {
+	IDs    []uint `json:"ids" binding:"required"`
+	Action string `json:"action" binding:"required"`
+}
+
+// BatchCommentOp 批量通过/删除（前端 comments.html 契约）
+// POST /api/admin/comments/batch  Body: {"ids":[1,2],"action":"approve"}
+func (c *CommentController) BatchCommentOp(ctx *gin.Context) {
+	var req batchCommentRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		utils.Fail(ctx, "参数错误："+err.Error())
+		return
+	}
+	if err := c.service.BatchCommentOp(req.IDs, req.Action); err != nil {
 		utils.Fail(ctx, err.Error())
 		return
 	}

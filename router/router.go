@@ -25,6 +25,8 @@ func Init(r *gin.Engine) {
 	tagDAO := dao.NewTagDAO()
 	commentDAO := dao.NewCommentDAO()
 	settingDAO := dao.NewSettingDAO()
+	imageDAO := dao.NewImageDAO()
+	linkDAO := dao.NewLinkDAO()
 
 	articleSvc := service.NewArticleService(articleDAO, model.DB)
 	categorySvc := service.NewCategoryService(categoryDAO, model.DB)
@@ -32,6 +34,9 @@ func Init(r *gin.Engine) {
 	tagSvc := service.NewTagService(tagDAO, model.DB)
 	commentSvc := service.NewCommentService(commentDAO, model.DB)
 	settingSvc := service.NewSettingService(settingDAO, model.DB)
+	imageSvc := service.NewImageService(imageDAO, model.DB)
+	linkSvc := service.NewLinkService(linkDAO, model.DB)
+	dashboardSvc := service.NewDashboardService(model.DB)
 
 	articleCtl := controller.NewArticleController(articleSvc)
 	userSvc := service.NewUserService(userDAO, model.DB)
@@ -41,8 +46,11 @@ func Init(r *gin.Engine) {
 	tagCtl := controller.NewTagController(tagSvc)
 	commentCtl := controller.NewCommentController(commentSvc)
 	settingCtl := controller.NewSettingController(settingSvc)
-	uploadCtl := controller.NewUploadController()
+	uploadCtl := controller.NewUploadController(imageDAO, model.DB)
 	feedCtl := controller.NewFeedController(articleSvc)
+	imageCtl := controller.NewImageController(imageSvc)
+	linkCtl := controller.NewLinkController(linkSvc)
+	dashboardCtl := controller.NewDashboardController(dashboardSvc)
 
 	api := r.Group("/api")
 	{
@@ -64,11 +72,18 @@ func Init(r *gin.Engine) {
 		api.GET("/settings", settingCtl.GetSiteSettings)
 		api.GET("/quote", settingCtl.GetDailyQuote)
 
+		// 联调补齐：前端页面使用的路径/结构与后端契约（home.js/common.js/about.html/archive.html）
+		api.GET("/site", settingCtl.GetSiteInfo)            // 前台站点信息（含统计数字）
+		api.GET("/quote/random", settingCtl.GetRandomQuote) // 前台每日一言（结构化 {content, author}）
+		api.GET("/archive", articleCtl.GetArchives)         // 归档别名（前端用单数）
+
 		// 阶段三：用户体系
 		// 注册/登录不需要登录
 		api.POST("/auth/register", authCtl.Register)
 		// 登录接口严格限流（防暴力破解密码：5/秒、突发 10）
 		api.POST("/auth/login", middleware.RateLimit(5, 10), authCtl.Login)
+		// 后台登录（前端 admin/login.html 契约；编辑+ 才能进后台，角色校验在 handler 内）
+		api.POST("/admin/login", middleware.RateLimit(5, 10), authCtl.AdminLogin)
 
 		// 以下接口需要先登录（AuthRequired 解析 token 后，handler 用 GetUserID 取身份）
 		authed := api.Group("", middleware.AuthRequired())
@@ -82,14 +97,35 @@ func Init(r *gin.Engine) {
 		authed.PUT("/my/articles/:id", articleCtl.UpdateMyArticle)
 		authed.DELETE("/my/articles/:id", articleCtl.DeleteMyArticle)
 		authed.POST("/upload", uploadCtl.UploadImage)
+		// 后台改密码（前端 admin/settings.html 契约：改的是当前登录用户的密码）
+		authed.PUT("/admin/password", authCtl.ChangePassword)
 
 		// 后台管理组：编辑及以上（RBAC 双锁：先登录 401，再验角色 403）
 		admin := api.Group("/admin", middleware.AuthRequired(), middleware.RequireRole(model.RoleEditor))
 		admin.GET("/articles", articleCtl.GetAdminArticles)
 		admin.PUT("/articles/:id/approve", articleCtl.ApproveArticle)
 		admin.PUT("/articles/:id/reject", articleCtl.RejectArticle)
-		// 站点设置（编辑+）
+		// 联调补齐：后台文章完整管理（列表已有，补详情/新建/编辑/删除，管理员可操作任何人的文章）
+		admin.GET("/articles/:id", articleCtl.GetAdminArticleDetail)
+		admin.POST("/articles", articleCtl.CreateAdminArticle)
+		admin.PUT("/articles/:id", articleCtl.UpdateAdminArticle)
+		admin.DELETE("/articles/:id", articleCtl.DeleteAdminArticle)
+		// 仪表盘统计（编辑+）
+		admin.GET("/dashboard", dashboardCtl.GetDashboard)
+		// 后台分类下拉（前端 admin/articles.html 用 id/name 填充下拉框）
+		admin.GET("/categories", categoryCtl.GetCategoryList)
+		// 站点设置（编辑+）：GET 回显 + PUT 保存
+		admin.GET("/settings", settingCtl.GetAdminSettings)
 		admin.PUT("/settings", settingCtl.UpdateSettings)
+		// 图库管理（编辑+）：上传写库 + 列表 + 删除
+		admin.POST("/upload", uploadCtl.UploadImage)
+		admin.GET("/images", imageCtl.GetImages)
+		admin.DELETE("/images/:id", imageCtl.DeleteImage)
+		// 友情链接（编辑+）：完整 CRUD
+		admin.GET("/links", linkCtl.GetLinks)
+		admin.POST("/links", linkCtl.CreateLink)
+		admin.PUT("/links/:id", linkCtl.UpdateLink)
+		admin.DELETE("/links/:id", linkCtl.DeleteLink)
 		// admin 组：AuthRequired(401) → RequireRole(Editor)(403)
 		// 子组再叠 RequireRole(Admin)：编辑 role=2 < 3 也被拦
 		adminUsers := admin.Group("/users", middleware.RequireRole(model.RoleAdmin))
@@ -103,11 +139,13 @@ func Init(r *gin.Engine) {
 		admin.POST("/tags", tagCtl.CreateTag)
 		admin.PUT("/tags/:id", tagCtl.UpdateTag)
 		admin.DELETE("/tags/:id", tagCtl.DeleteTag)
-		// 评论管理（编辑+）
+		// 评论管理（编辑+）：原有通过/驳回/删除 + 通用改状态 + 批量操作
 		admin.GET("/comments", commentCtl.GetAdminComments)
 		admin.PUT("/comments/:id/approve", commentCtl.ApproveComment)
 		admin.PUT("/comments/:id/reject", commentCtl.RejectComment)
 		admin.DELETE("/comments/:id", commentCtl.DeleteComment)
+		admin.PUT("/comments/:id/status", commentCtl.UpdateCommentStatus)
+		admin.POST("/comments/batch", commentCtl.BatchCommentOp)
 	}
 
 	// 前端 SPA 静态资源托管(web/ 目录)

@@ -23,4 +23,7 @@ type Comment struct {
 
 	Article Article `gorm:"foreignKey:ArticleID" json:"article,omitempty"` // 关联文章
 	User    *User   `gorm:"foreignKey:UserID" json:"user,omitempty"`       // 关联用户；游客时为 nil
+
+	// 以下字段不落库（gorm:"-"），由 Service 填充后返回给前端
+	ArticleTitle string `gorm:"-" json:"articleTitle"` // 后台列表用：文章标题（省得前端从 article 里再取一层）
 }

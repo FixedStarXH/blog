@@ -2,6 +2,7 @@ package controller
 
 import (
 	"blog-system/middleware"
+	"blog-system/model"
 	"blog-system/service"
 	"blog-system/utils"
 
@@ -66,6 +67,28 @@ func (c *AuthController) Login(ctx *gin.Context) {
 	user, token, err := c.service.Login(req.Username, req.Password)
 	if err != nil {
 		utils.Fail(ctx, err.Error())
+		return
+	}
+	utils.Success(ctx, gin.H{"token": token, "user": user})
+}
+
+// AdminLogin 后台登录（前端 admin/login.html 契约）
+// POST /api/admin/login
+// 和普通登录的区别：登录成功后校验角色，编辑(2)及以上才能进管理后台
+func (c *AuthController) AdminLogin(ctx *gin.Context) {
+	var req loginRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		utils.Fail(ctx, "参数错误："+err.Error())
+		return
+	}
+	user, token, err := c.service.Login(req.Username, req.Password)
+	if err != nil {
+		utils.Fail(ctx, err.Error())
+		return
+	}
+	// 普通用户（role=1）不允许进后台：登录本身成功，但被权限拒绝（403）
+	if user.Role < model.RoleEditor {
+		utils.Forbidden(ctx, "该账号无后台管理权限")
 		return
 	}
 	utils.Success(ctx, gin.H{"token": token, "user": user})

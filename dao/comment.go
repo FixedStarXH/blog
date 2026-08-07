@@ -68,3 +68,17 @@ func (d *CommentDAO) UpdateStatus(db *gorm.DB, id uint, status int) error {
 func (d *CommentDAO) Delete(db *gorm.DB, id uint) error {
 	return db.Delete(&model.Comment{}, id).Error
 }
+
+// UpdateStatusBatch 批量改状态（后台批量通过/驳回用）
+func (d *CommentDAO) UpdateStatusBatch(db *gorm.DB, ids []uint, status int) (int64, error) {
+	result := db.Model(&model.Comment{}).
+		Where("id IN ?", ids).
+		Update("status", status)
+	return result.RowsAffected, result.Error
+}
+
+// DeleteBatch 批量删除（后台批量删除用，软删除）
+func (d *CommentDAO) DeleteBatch(db *gorm.DB, ids []uint) (int64, error) {
+	result := db.Where("id IN ?", ids).Delete(&model.Comment{})
+	return result.RowsAffected, result.Error
+}

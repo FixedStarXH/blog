@@ -95,7 +95,7 @@ async function loadArticles() {
       <a class="entry" href="article.html?id=${a.id}">
         <span class="num">${String((curPage-1)*pageSize + i + 1).padStart(3,'0')}</span>
         <span class="title"><span>${esc(a.title)}</span><span class="arrow">→</span></span>
-        <span class="cat">${esc(a.category?.name || '未分类')}</span>
+        <span class="entry-cat">${esc(a.category?.name || '未分类')}</span>
         <span class="date">${fmtDate(a.createdAt)}<span class="views">${fmtNum(a.viewCount)} views</span></span>
       </a>`).join('');
     renderPagination(data.total);

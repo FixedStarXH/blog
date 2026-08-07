@@ -15,7 +15,7 @@ func NewSettingController(service *service.SettingService) *SettingController {
 	return &SettingController{service: service}
 }
 
-// GetSiteSettings 站点信息
+// GetSiteSettings 站点信息（老接口，Apifox 契约保留）
 // GET /api/settings
 func (c *SettingController) GetSiteSettings(ctx *gin.Context) {
 	settings, err := c.service.GetSiteSettings()
@@ -26,7 +26,7 @@ func (c *SettingController) GetSiteSettings(ctx *gin.Context) {
 	utils.Success(ctx, settings)
 }
 
-// GetDailyQuote 每日一言
+// GetDailyQuote 每日一言（老接口，Apifox 契约保留）
 // GET /api/quote
 func (c *SettingController) GetDailyQuote(ctx *gin.Context) {
 	quote, err := c.service.GetDailyQuote()
@@ -38,15 +38,78 @@ func (c *SettingController) GetDailyQuote(ctx *gin.Context) {
 	utils.Success(ctx, gin.H{"quote": quote})
 }
 
+// ------------------------------------------------------------
+// 前台站点信息（前端 home.js / common.js / about.html 契约）
+// ------------------------------------------------------------
+
+// GetSiteInfo 前台站点信息（含统计数字）
+// GET /api/site
+func (c *SettingController) GetSiteInfo(ctx *gin.Context) {
+	info, err := c.service.GetSiteInfo()
+	if err != nil {
+		utils.Error(ctx, "获取站点信息失败")
+		return
+	}
+	utils.Success(ctx, info)
+}
+
+// GetRandomQuote 前台每日一言（结构化 {content, author}）
+// GET /api/quote/random
+func (c *SettingController) GetRandomQuote(ctx *gin.Context) {
+	quote, err := c.service.GetRandomQuote()
+	if err != nil {
+		utils.Error(ctx, "获取每日一言失败")
+		return
+	}
+	utils.Success(ctx, quote)
+}
+
+// ------------------------------------------------------------
+// 后台设置（admin/settings.html 契约）
+// ------------------------------------------------------------
+
+// updateSettingsRequest 站点设置保存体（与前端表单字段一一对应）
+type updateSettingsRequest struct {
+	SiteTitle       string              `json:"site_title"`
+	SiteSubtitle    string              `json:"site_subtitle"`
+	SiteDescription string              `json:"site_description"`
+	SiteLogo        string              `json:"site_logo"`
+	SiteBeian       string              `json:"site_beian"`
+	SocialGithub    string              `json:"social_github"`
+	SocialEmail     string              `json:"social_email"`
+	Quotes          []service.QuoteItem `json:"quotes"` // 名言池（结构化和前端编辑框来回转换）
+}
+
+// GetAdminSettings 后台站点设置全量（编辑+）
+// GET /api/admin/settings
+func (c *SettingController) GetAdminSettings(ctx *gin.Context) {
+	settings, err := c.service.GetAdminSettings()
+	if err != nil {
+		utils.Error(ctx, "获取站点设置失败")
+		return
+	}
+	utils.Success(ctx, settings)
+}
+
 // UpdateSettings 更新站点设置（编辑+）
-// PUT /api/admin/settings   Body: {"site_title":"新标题","daily_quotes":"第1条\n第2条"}
+// PUT /api/admin/settings  Body: {"site_title":"...","quotes":[{"content":"...","author":"..."}]}
 func (c *SettingController) UpdateSettings(ctx *gin.Context) {
-	var kv map[string]string
-	if err := ctx.ShouldBindJSON(&kv); err != nil {
+	var req updateSettingsRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
 		utils.Fail(ctx, "参数错误："+err.Error())
 		return
 	}
-	if err := c.service.UpdateSettings(kv); err != nil {
+	input := &service.SiteSettingsInput{
+		SiteTitle:       req.SiteTitle,
+		SiteSubtitle:    req.SiteSubtitle,
+		SiteDescription: req.SiteDescription,
+		SiteLogo:        req.SiteLogo,
+		SiteBeian:       req.SiteBeian,
+		SocialGithub:    req.SocialGithub,
+		SocialEmail:     req.SocialEmail,
+		Quotes:          req.Quotes,
+	}
+	if err := c.service.UpdateSettings(input); err != nil {
 		utils.Fail(ctx, err.Error())
 		return
 	}

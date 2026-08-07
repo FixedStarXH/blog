@@ -359,3 +359,117 @@ func (c *ArticleController) UnlockArticle(ctx *gin.Context) {
 	}
 	utils.Success(ctx, article)
 }
+
+// ------------------------------------------------------------
+// 后台文章管理（编辑+）：管理员可操作任何人的文章
+// ------------------------------------------------------------
+
+// adminArticleRequest 后台新建/编辑文章：比作者投稿多 status/isTop（管理员可直接定稿）
+type adminArticleRequest struct {
+	Title      string     `json:"title" binding:"required"`
+	Content    string     `json:"content" binding:"required"`
+	Summary    string     `json:"summary"`
+	CoverImage string     `json:"coverImage"`
+	Status     int        `json:"status"`    // 0草稿 1发布 2待审 3驳回 4已排期
+	IsTop      bool       `json:"isTop"`     // 置顶
+	Password   string     `json:"password"`  // 私密文章密码；空=公开
+	PublishAt  *time.Time `json:"publishAt"` // 定时发布
+	CategoryID uint       `json:"categoryId" binding:"required"`
+	TagIDs     []uint     `json:"tagIds"`
+}
+
+// GetAdminArticleDetail 后台文章详情（编辑+）
+// GET /api/admin/articles/:id
+// 注意：model.Article 的 Password 是 json:"-"，公开接口绝不外泄；
+// 这里后台需要回显密码（编辑表单用），所以单独拼一次响应。
+func (c *ArticleController) GetAdminArticleDetail(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
+	if err != nil {
+		utils.Fail(ctx, "无效的文章ID")
+		return
+	}
+	article, err := c.service.GetAdminArticleDetail(uint(id))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			utils.Fail(ctx, "文章不存在")
+			return
+		}
+		utils.Error(ctx, "获取文章失败")
+		return
+	}
+	utils.Success(ctx, gin.H{
+		"id":         article.ID,
+		"title":      article.Title,
+		"summary":    article.Summary,
+		"coverImage": article.CoverImage,
+		"content":    article.Content,
+		"status":     article.Status,
+		"isTop":      article.IsTop,
+		"password":   article.Password,
+		"categoryId": article.CategoryID,
+		"publishAt":  article.PublishAt,
+		"authorId":   article.AuthorID,
+		"createdAt":  article.CreatedAt,
+		"tags":       article.Tags,
+	})
+}
+
+// CreateAdminArticle 后台新建/代发文章（编辑+）
+// POST /api/admin/articles
+func (c *ArticleController) CreateAdminArticle(ctx *gin.Context) {
+	var req adminArticleRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		utils.Fail(ctx, "参数错误："+err.Error())
+		return
+	}
+	userID := middleware.GetUserID(ctx)
+	article, err := c.service.AdminCreateArticle(userID, req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.Password, req.PublishAt, req.Status, req.IsTop, req.TagIDs)
+	if err != nil {
+		utils.Fail(ctx, err.Error())
+		return
+	}
+	utils.Success(ctx, article)
+}
+
+// UpdateAdminArticle 后台编辑文章（编辑+）
+// PUT /api/admin/articles/:id  Body 与新建相同（含 isTop/status）
+func (c *ArticleController) UpdateAdminArticle(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
+	if err != nil {
+		utils.Fail(ctx, "无效的文章ID")
+		return
+	}
+	var req adminArticleRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		utils.Fail(ctx, "参数错误："+err.Error())
+		return
+	}
+	if err := c.service.AdminUpdateArticle(uint(id), req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.Password, req.PublishAt, req.Status, req.IsTop, req.TagIDs); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			utils.Fail(ctx, "文章不存在")
+			return
+		}
+		utils.Fail(ctx, err.Error())
+		return
+	}
+	utils.Success(ctx, nil)
+}
+
+// DeleteAdminArticle 后台删除文章（编辑+，软删除）
+// DELETE /api/admin/articles/:id
+func (c *ArticleController) DeleteAdminArticle(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
+	if err != nil {
+		utils.Fail(ctx, "无效的文章ID")
+		return
+	}
+	if err := c.service.AdminDeleteArticle(uint(id)); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			utils.Fail(ctx, "文章不存在")
+			return
+		}
+		utils.Fail(ctx, err.Error())
+		return
+	}
+	utils.Success(ctx, nil)
+}

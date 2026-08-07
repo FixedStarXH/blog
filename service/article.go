@@ -221,3 +221,89 @@ func (s *ArticleService) UnlockArticle(id uint, password string) (*model.Article
 	}
 	return article, nil
 }
+
+// ------------------------------------------------------------
+// 后台文章管理（编辑+）：与"我的文章"不同，管理员可操作任何人的文章
+// ------------------------------------------------------------
+
+// GetAdminArticleDetail 后台文章详情（含 Tags；密码由 Controller 单独返回给后台）
+func (s *ArticleService) GetAdminArticleDetail(id uint) (*model.Article, error) {
+	article, err := s.dao.FindByID(s.db, id) // 只 Preload 了 Author/Category
+	if err != nil {
+		return nil, err
+	}
+	// 补 Preload Tags：后台编辑表单要回显标签
+	if err := s.db.Preload("Tags").First(article, id).Error; err != nil {
+		return nil, err
+	}
+	return article, nil
+}
+
+// AdminCreateArticle 后台代发/新建文章：状态与置顶由后台直接指定
+// （和作者投稿不同：投稿固定走"待审核"，管理员自己发可以直接发布）
+func (s *ArticleService) AdminCreateArticle(authorID, categoryID uint, title, content, summary, coverImage, password string, publishAt *time.Time, status int, isTop bool, tagIDs []uint) (*model.Article, error) {
+	tags := make([]model.Tag, 0, len(tagIDs))
+	for _, id := range tagIDs {
+		tags = append(tags, model.Tag{BaseModel: model.BaseModel{ID: id}})
+	}
+	article := &model.Article{
+		Title:      title,
+		Content:    content,
+		Summary:    summary,
+		CoverImage: coverImage,
+		Password:   password,
+		PublishAt:  publishAt,
+		Status:     status,
+		IsTop:      isTop,
+		AuthorID:   authorID,
+		CategoryID: categoryID,
+		Tags:       tags,
+	}
+	if err := s.dao.Create(s.db, article); err != nil {
+		return nil, err
+	}
+	return article, nil
+}
+
+// AdminUpdateArticle 后台编辑任意文章（含置顶/状态）
+func (s *ArticleService) AdminUpdateArticle(id, categoryID uint, title, content, summary, coverImage, password string, publishAt *time.Time, status int, isTop bool, tagIDs []uint) error {
+	// 先判存在：GORM 的 Updates 查不到行返回 nil 不报错
+	if _, err := s.dao.FindByID(s.db, id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("文章不存在")
+		}
+		return err
+	}
+	// map 更新才能写入"零值"（is_top=false、status=0）
+	updates := map[string]interface{}{
+		"title":       title,
+		"content":     content,
+		"summary":     summary,
+		"cover_image": coverImage,
+		"category_id": categoryID,
+		"password":    password,
+		"publish_at":  publishAt,
+		"status":      status,
+		"is_top":      isTop,
+	}
+	if err := s.dao.UpdateByID(s.db, id, updates); err != nil {
+		return err
+	}
+	// 替换标签（多对多）
+	tags := make([]model.Tag, 0, len(tagIDs))
+	for _, tid := range tagIDs {
+		tags = append(tags, model.Tag{BaseModel: model.BaseModel{ID: tid}})
+	}
+	return s.db.Model(&model.Article{BaseModel: model.BaseModel{ID: id}}).Association("Tags").Replace(tags)
+}
+
+// AdminDeleteArticle 后台删除任意文章（软删除）
+func (s *ArticleService) AdminDeleteArticle(id uint) error {
+	if _, err := s.dao.FindByID(s.db, id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("文章不存在")
+		}
+		return err
+	}
+	return s.db.Delete(&model.Article{}, id).Error
+}
