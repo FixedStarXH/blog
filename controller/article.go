@@ -208,11 +208,12 @@ func (c *ArticleController) AddView(ctx *gin.Context) {
 
 	ip := ctx.ClientIP()
 
-	if err := c.service.AddView(uint(id), ip); err != nil {
+	viewCount, err := c.service.AddView(uint(id), ip)
+	if err != nil {
 		utils.Error(ctx, "浏览量更新失败")
 		return
 	}
-	utils.Success(ctx, nil)
+	utils.Success(ctx, gin.H{"viewCount": viewCount})
 }
 func (c *ArticleController) Like(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
@@ -223,11 +224,12 @@ func (c *ArticleController) Like(ctx *gin.Context) {
 
 	ip := ctx.ClientIP()
 
-	if err := c.service.Like(uint(id), ip); err != nil {
+	result, err := c.service.Like(uint(id), ip)
+	if err != nil {
 		utils.Error(ctx, "点赞失败")
 		return
 	}
-	utils.Success(ctx, nil)
+	utils.Success(ctx, result)
 }
 
 func (c *ArticleController) GetHotArticles(ctx *gin.Context) {
@@ -472,4 +474,26 @@ func (c *ArticleController) DeleteAdminArticle(ctx *gin.Context) {
 		return
 	}
 	utils.Success(ctx, nil)
+}
+
+// batchArticleRequest 批量操作：ids 文章ID数组，action: publish/draft/top/untop/delete
+type batchArticleRequest struct {
+	IDs    []uint `json:"ids" binding:"required"`
+	Action string `json:"action" binding:"required"`
+}
+
+// BatchArticleOp 后台批量操作（前端 admin/articles.html 契约）
+// POST /api/admin/articles/batch  Body: {"ids":[1,2],"action":"delete"}
+func (c *ArticleController) BatchArticleOp(ctx *gin.Context) {
+	var req batchArticleRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		utils.Fail(ctx, "参数错误："+err.Error())
+		return
+	}
+	affected, err := c.service.BatchArticleOp(req.IDs, req.Action)
+	if err != nil {
+		utils.Fail(ctx, err.Error())
+		return
+	}
+	utils.Success(ctx, gin.H{"affected": affected})
 }

@@ -745,3 +745,35 @@ table.data .actions {
     padding: 14px 0;
   }
 }
+
+/* ============ 批量操作工具条 ============ */
+.batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  background: var(--paper-2);
+  border: 1px solid var(--ink);
+  border-left: 4px solid var(--red);
+  flex-wrap: wrap;
+}
+
+.batch-bar .batch-count {
+  font-size: 13px;
+  font-weight: 600;
+  margin-right: auto;
+}
+
+.batch-bar .batch-count b {
+  color: var(--red);
+  font-size: 16px;
+}
+
+/* 表格内 checkbox 美化：与瑞士方框风格一致 */
+.data input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--red);
+}

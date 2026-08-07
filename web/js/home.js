@@ -9,8 +9,12 @@ async function loadHome() {
     // 站点统计
     const site = await api.get('/api/site');
     if (site.stats) {
-      document.getElementById('stat-articles').textContent = site.stats.articleCount ?? '-';
-      document.getElementById('stat-views').textContent = fmtNum(site.stats.viewCount ?? 0);
+      // 数字滚动动画：比直接显示更生动（animateNumber 在 common.js）
+      const ac = site.stats.articleCount ?? 0;
+      const vc = site.stats.viewCount ?? 0;
+      // 文章数小，整数显示；浏览量可能很大，用 fmtNum 格式化（带 k/w）
+      animateNumber(document.getElementById('stat-articles'), ac, 900);
+      animateNumber(document.getElementById('stat-views'), vc, 1400, fmtNum);
     }
     if (site.title) document.getElementById('hero-brand').textContent = '● ' + site.title + ' · EST. ' + (site.stats?.foundYear ?? 2019);
 

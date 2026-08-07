@@ -16,6 +16,8 @@ async function initArticle() {
   try {
     article = await api.get('/api/articles/' + id);
     document.title = article.title + ' — LUMI';
+    // SEO：动态注入 Open Graph / Twitter Card meta，让社交分享有标题、摘要、封面
+    injectSEO(article);
     renderArticle();
 
     // 浏览量自增(前台调用一次)
@@ -24,11 +26,69 @@ async function initArticle() {
         const el = document.getElementById('view-num');
         if (el) el.textContent = fmtNum(d.viewCount);
       }
-    }).catch(() => {});
+    }).catch(() => { });
     loadComments();
   } catch (e) {
     showError(e.message);
   }
+}
+
+// SEO meta 注入：Open Graph + Twitter Card + JSON-LD 结构化数据
+// 让文章被分享到微信/Twitter/搜索引擎时有标题、摘要、封面图
+function injectSEO(a) {
+  const url = location.href;
+  const title = a.title + ' — LUMI';
+  const desc = a.summary || (a.content || '').replace(/<[^>]*>/g, '').slice(0, 120);
+  const cover = a.coverImage || '';
+  const metas = [
+    { name: 'description', content: desc },
+    { property: 'og:title', content: title },
+    { property: 'og:description', content: desc },
+    { property: 'og:type', content: 'article' },
+    { property: 'og:url', content: url },
+    { property: 'og:site_name', content: 'LUMI BLOG' },
+    { name: 'twitter:card', content: 'summary_large_image' },
+    { name: 'twitter:title', content: title },
+    { name: 'twitter:description', content: desc },
+  ];
+  if (cover) {
+    metas.push({ property: 'og:image', content: cover });
+    metas.push({ name: 'twitter:image', content: cover });
+  }
+  // 文章发布时间
+  if (a.createdAt) {
+    metas.push({ property: 'article:published_time', content: a.createdAt });
+  }
+  metas.forEach(m => {
+    let el = document.querySelector(`meta[${m.name ? 'name' : 'property'}="${m.name || m.property}"]`);
+    if (!el) {
+      el = document.createElement('meta');
+      if (m.name) el.setAttribute('name', m.name);
+      else el.setAttribute('property', m.property);
+      document.head.appendChild(el);
+    }
+    el.setAttribute('content', m.content);
+  });
+
+  // JSON-LD 结构化数据：帮助搜索引擎理解文章结构
+  const ld = {
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    headline: a.title,
+    datePublished: a.createdAt,
+    author: { '@type': 'Person', name: a.author?.nickname || '匿名' },
+    description: desc,
+    url,
+  };
+  if (cover) ld.image = cover;
+  let ldScript = document.getElementById('ld-json');
+  if (!ldScript) {
+    ldScript = document.createElement('script');
+    ldScript.id = 'ld-json';
+    ldScript.type = 'application/ld+json';
+    document.head.appendChild(ldScript);
+  }
+  ldScript.textContent = JSON.stringify(ld);
 }
 
 function showError(msg) {
@@ -63,6 +123,9 @@ function renderArticle() {
     ? sessionStorage.getItem('unlock_content_' + a.id) || a.content
     : a.content;
 
+  // 字数统计：去掉 HTML 标签后的纯文本字数
+  const wordCount = (content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, '').length;
+
   wrap.innerHTML = `
     <div class="article-content-wrap">
       <div class="article-head">
@@ -72,8 +135,13 @@ function renderArticle() {
           <span>${esc(a.author?.nickname || '作者')}</span><span class="sep">·</span>
           <span>${fmtDate(a.createdAt)}</span><span class="sep">·</span>
           <span>阅读 ${fmtMinutes(content)} 分钟</span><span class="sep">·</span>
+          <span>${fmtNum(wordCount)} 字</span><span class="sep">·</span>
           <span><span id="view-num">${fmtNum(a.viewCount)}</span> 阅读</span><span class="sep">·</span>
           <a href="javascript:;" onclick="doLike()" style="color:var(--red);">♡ <span id="like-num">${a.likeCount || 0}</span></a>
+          <span class="sep">·</span>
+          <a href="javascript:;" onclick="shareArticle()" class="share-link" title="分享文章">↗ 分享</a>
+          <span class="sep">·</span>
+          <a href="javascript:window.print()" class="share-link" title="打印文章">⎙ 打印</a>
         </div>
         ${(a.tags && a.tags.length) ? `<div class="a-tags">${a.tags.map(t => `<a class="tag" href="articles.html?tag=${encodeURIComponent(t.name)}"># ${esc(t.name)}</a>`).join('')}</div>` : ''}
       </div>
@@ -106,7 +174,11 @@ function renderArticle() {
           <input type="text" id="c-name" placeholder="昵称(2-20 字)" maxlength="20">
           <input type="email" id="c-email" placeholder="邮箱(可选)" style="display:none">
         </div>
-        <textarea id="c-content" placeholder="写下你的评论…" maxlength="1000"></textarea>
+        <div class="emoji-picker">
+          <textarea id="c-content" placeholder="写下你的评论…" maxlength="1000"></textarea>
+          <button type="button" class="emoji-trigger" id="emoji-trigger" title="插入表情">☺</button>
+          <div class="emoji-panel" id="emoji-panel"></div>
+        </div>
         <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;">
           <span style="font-size:12px;color:var(--gray-a);">评论需审核后展示</span>
           <button class="submit" type="submit">发表评论</button>
@@ -116,6 +188,77 @@ function renderArticle() {
     </section>`;
 
   renderTOC();
+  highlightCode();
+  initReadingProgress();
+  initKeyboardNav();
+  initLightbox();
+  initEmojiPicker();
+}
+
+// 代码高亮：在文章渲染完成后调用 hljs
+function highlightCode() {
+  // 等待 highlight.js 库加载完成（CDN 用了 defer）
+  const run = () => {
+    if (typeof hljs === 'undefined') {
+      setTimeout(run, 50);
+      return;
+    }
+    document.querySelectorAll('#article-content pre code').forEach(b => {
+      try { hljs.highlightElement(b); } catch (e) { }
+    });
+    addCopyButtons();
+  };
+  run();
+}
+
+// 给每个代码块加"复制"按钮：技术博客必备，方便读者抄代码
+function addCopyButtons() {
+  document.querySelectorAll('#article-content pre').forEach(pre => {
+    if (pre.querySelector('.code-copy')) return; // 避免重复添加
+    const btn = document.createElement('button');
+    btn.className = 'code-copy';
+    btn.textContent = '复制';
+    btn.title = '复制代码';
+    btn.addEventListener('click', async () => {
+      const code = pre.querySelector('code');
+      const text = code ? code.textContent : pre.textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.textContent = '已复制 ✓';
+        btn.classList.add('done');
+      } catch (e) {
+        // 兜底：临时 textarea + execCommand
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); btn.textContent = '已复制 ✓'; btn.classList.add('done'); }
+        catch (err) { toast('复制失败', true); }
+        document.body.removeChild(ta);
+      }
+      setTimeout(() => { btn.textContent = '复制'; btn.classList.remove('done'); }, 1800);
+    });
+    // pre 需要 position:relative 让按钮绝对定位到右上角
+    pre.style.position = 'relative';
+    pre.appendChild(btn);
+  });
+}
+
+// 阅读进度条：根据滚动位置更新顶部细条宽度
+function initReadingProgress() {
+  const bar = document.getElementById('reading-progress');
+  if (!bar) return;
+  const update = () => {
+    const h = document.documentElement;
+    const scrolled = h.scrollTop;
+    const total = h.scrollHeight - h.clientHeight;
+    const pct = total > 0 ? (scrolled / total) * 100 : 0;
+    bar.style.width = pct + '%';
+  };
+  window.addEventListener('scroll', update, { passive: true });
+  update();
 }
 
 function renderTOC() {
@@ -130,16 +273,101 @@ function renderTOC() {
   const toc = document.getElementById('toc');
   toc.innerHTML = '<h4>目录 CONTENTS</h4><ul>' +
     Array.from(heads).map((h, i) =>
-      `<li class="${h.tagName === 'H3' ? 'l2' : ''}"><a href="#sec-${i}">${esc(h.textContent)}</a></li>`
+      `<li class="${h.tagName === 'H3' ? 'l2' : ''}"><a href="#sec-${i}" data-i="${i}">${esc(h.textContent)}</a></li>`
     ).join('') + '</ul>';
 
-  // 滚动高亮
   const links = toc.querySelectorAll('a');
-  window.addEventListener('scroll', () => {
-    let cur = 0;
-    heads.forEach((h, i) => { if (h.getBoundingClientRect().top < 120) cur = i; });
-    links.forEach((l, i) => l.classList.toggle('active', i === cur));
-  }, { passive: true });
+
+  // 滚动高亮：优先用 IntersectionObserver（性能更好，比 scroll 监听少抖动）
+  // 不支持时回退到 scroll 监听
+  if ('IntersectionObserver' in window) {
+    const activeMap = new Map(); // 记录每个 head 当前是否在视口"判定区"
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        activeMap.set(e.target.dataset.i, e.isIntersecting);
+      });
+      // 取第一个仍"在判定区"的标题作为当前高亮
+      let cur = -1;
+      heads.forEach((h, i) => {
+        if (activeMap.get(String(i)) || h.getBoundingClientRect().top < 120) cur = i;
+      });
+      if (cur === -1) cur = 0;
+      links.forEach((l, i) => l.classList.toggle('active', i === cur));
+    }, {
+      // 判定区：顶部 120px 以下、底部 60% 以上才算"正在阅读"
+      rootMargin: '-120px 0px -60% 0px',
+      threshold: 0,
+    });
+    heads.forEach((h, i) => {
+      h.dataset.i = String(i); // 让回调能拿到对应 TOC 索引
+      io.observe(h);
+    });
+  } else {
+    // 回退方案：scroll 监听 + getBoundingClientRect
+    window.addEventListener('scroll', () => {
+      let cur = 0;
+      heads.forEach((h, i) => { if (h.getBoundingClientRect().top < 120) cur = i; });
+      links.forEach((l, i) => l.classList.toggle('active', i === cur));
+    }, { passive: true });
+  }
+
+  // 点击 TOC 项：平滑滚动到对应标题（避免默认 hash 跳转的硬切）
+  links.forEach(l => {
+    l.addEventListener('click', (e) => {
+      e.preventDefault();
+      const target = document.getElementById('sec-' + l.dataset.i);
+      if (target) {
+        const top = target.getBoundingClientRect().top + window.scrollY - 80;
+        window.scrollTo({ top, behavior: 'smooth' });
+        history.replaceState(null, '', '#sec-' + l.dataset.i);
+      }
+    });
+  });
+}
+
+// 键盘快捷键：← 上一篇 / → 下一篇 / c 聚焦评论框
+function initKeyboardNav() {
+  document.addEventListener('keydown', (e) => {
+    // 在输入框内不拦截（避免影响打字）
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea') return;
+    if (e.key === 'ArrowLeft' && article && article.prev && article.prev.id) {
+      location.href = 'article.html?id=' + article.prev.id;
+    } else if (e.key === 'ArrowRight' && article && article.next && article.next.id) {
+      location.href = 'article.html?id=' + article.next.id;
+    } else if (e.key.toLowerCase() === 'c') {
+      const ta = document.getElementById('c-content');
+      if (ta) { ta.focus(); ta.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    }
+  });
+}
+
+// 分享文章：优先用 Web Share API（移动端原生分享），回退到复制链接
+async function shareArticle() {
+  const url = location.href;
+  const shareData = {
+    title: article ? article.title : document.title,
+    text: article ? (article.summary || article.title) : document.title,
+    url,
+  };
+  // 现代浏览器 + 移动端：调原生分享面板
+  if (navigator.share) {
+    try { await navigator.share(shareData); return; } catch (e) { /* 用户取消，静默 */ }
+  }
+  // 回退：复制链接到剪贴板
+  try {
+    await navigator.clipboard.writeText(url);
+    toast('链接已复制到剪贴板');
+  } catch (e) {
+    // 老浏览器兜底：用临时 input + execCommand
+    const tmp = document.createElement('input');
+    tmp.value = url;
+    document.body.appendChild(tmp);
+    tmp.select();
+    try { document.execCommand('copy'); toast('链接已复制'); }
+    catch (err) { toast('复制失败，请手动复制地址栏链接', true); }
+    document.body.removeChild(tmp);
+  }
 }
 
 // 私密解锁
@@ -167,6 +395,53 @@ async function doLike() {
 // 评论
 let replyParent = null;
 
+// emoji 选择器：点击表情插入到评论框光标位置
+function initEmojiPicker() {
+  const trigger = document.getElementById('emoji-trigger');
+  const panel = document.getElementById('emoji-panel');
+  const ta = document.getElementById('c-content');
+  if (!trigger || !panel || !ta) return;
+
+  // 常用表情集合（不依赖外部库，纯前端）
+  const emojis = [
+    '😀', '😂', '🤣', '😊', '😍', '🥰', '😎', '🤔',
+    '😴', '🤯', '😱', '😭', '😅', '😄', '🙂', '🙃',
+    '👍', '👎', '👏', '🙌', '🤝', '✌️', '🤞', '💪',
+    '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '💔',
+    '🔥', '✨', '⭐', '🌟', '💡', '🎯', '🎉', '🎊',
+    '✅', '❌', '❓', '❗', '📝', '📌', '📎', '🔗',
+    '🚀', '💻', '⌨️', '🖥️', '🐛', '☕', '📚', '🎓',
+  ];
+
+  panel.innerHTML = emojis.map(e => `<button type="button" data-e="${e}">${e}</button>`).join('');
+
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    panel.classList.toggle('show');
+  });
+
+  panel.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-e]');
+    if (!btn) return;
+    const emoji = btn.dataset.e;
+    // 插入到光标位置（而非简单 append）
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    ta.value = ta.value.slice(0, start) + emoji + ta.value.slice(end);
+    ta.focus();
+    // 光标移到插入的表情后面
+    const pos = start + emoji.length;
+    ta.setSelectionRange(pos, pos);
+  });
+
+  // 点击面板外部关闭
+  document.addEventListener('click', (e) => {
+    if (!panel.contains(e.target) && e.target !== trigger) {
+      panel.classList.remove('show');
+    }
+  });
+}
+
 async function loadComments() {
   const listEl = document.getElementById('comment-list');
   try {
@@ -187,14 +462,21 @@ function renderComments(list) {
   const top = list.filter(c => !c.parentId);
   const reply = list.filter(c => c.parentId);
 
-  listEl.innerHTML = top.map(c => `
+  listEl.innerHTML = top.map((c, idx) => `
     <div class="comment-item">
-      <div class="c-meta"><span class="c-name">${esc(c.nickname || '匿名')}</span><span class="c-time">${fmtDate(c.createdAt)}</span></div>
+      <div class="c-meta">
+        <span class="c-floor">#${idx + 1}</span>
+        <span class="c-name">${esc(c.nickname || '匿名')}</span>
+        <span class="c-time">${fmtDate(c.createdAt)}</span>
+      </div>
       <div class="c-body">${esc(c.content)}</div>
       <button class="c-reply-btn" onclick="setReply(${c.id},'${esc(c.nickname || '匿名')}')">回复</button>
       ${reply.filter(r => r.parentId === c.id).map(r => `
         <div class="reply">
-          <div class="c-meta"><span class="c-name">${esc(r.nickname || '匿名')}</span><span class="c-time">${fmtDate(r.createdAt)}</span></div>
+          <div class="c-meta">
+            <span class="c-name">${esc(r.nickname || '匿名')}</span>
+            <span class="c-time">${fmtDate(r.createdAt)}</span>
+          </div>
           <div class="c-body">${esc(r.content)}</div>
         </div>`).join('')}
     </div>`).join('');

@@ -71,6 +71,7 @@ func Init(r *gin.Engine) {
 		api.GET("/archives", articleCtl.GetArchives)
 		api.GET("/settings", settingCtl.GetSiteSettings)
 		api.GET("/quote", settingCtl.GetDailyQuote)
+		api.GET("/links", linkCtl.GetPublicLinks) // 公开友链列表（前台 about 页用）
 
 		// 联调补齐：前端页面使用的路径/结构与后端契约（home.js/common.js/about.html/archive.html）
 		api.GET("/site", settingCtl.GetSiteInfo)            // 前台站点信息（含统计数字）
@@ -110,6 +111,8 @@ func Init(r *gin.Engine) {
 		admin.POST("/articles", articleCtl.CreateAdminArticle)
 		admin.PUT("/articles/:id", articleCtl.UpdateAdminArticle)
 		admin.DELETE("/articles/:id", articleCtl.DeleteAdminArticle)
+		// 批量操作（前端 admin/articles.html 契约：勾选 → 批量发布/草稿/置顶/删除）
+		admin.POST("/articles/batch", articleCtl.BatchArticleOp)
 		// 仪表盘统计（编辑+）
 		admin.GET("/dashboard", dashboardCtl.GetDashboard)
 		// 后台分类下拉（前端 admin/articles.html 用 id/name 填充下拉框）

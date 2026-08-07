@@ -1,54 +1,75 @@
-<!DOCTYPE html>
+﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>标签墙 — LUMI</title>
-<meta name="description" content="全部标签,按标签浏览文章。">
-<link rel="stylesheet" href="css/style.css?v=2">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>标签墙 — LUMI</title>
+  <meta name="description" content="全部标签,按标签浏览文章。">
+  <link rel="stylesheet" href="css/style.css?v=4">
 </head>
+
 <body>
 
-<header class="topbar" id="topbar"></header>
+  <header class="topbar" id="topbar"></header>
 
-<section class="page-hero">
-  <div class="grid">
-    <div class="crumb"><a href="index.html">Home</a> / <span>Tags</span></div>
-    <h1>标签墙</h1>
-    <div class="sub">ALL TAGS</div>
-  </div>
-</section>
+  <section class="page-hero">
+    <div class="grid">
+      <div class="crumb"><a href="index.html">Home</a> / <span>Tags</span></div>
+      <h1>标签墙</h1>
+      <div class="sub">ALL TAGS</div>
+    </div>
+  </section>
 
-<section class="tag-wall">
-  <div class="grid">
-    <div class="loading" id="tag-loading" style="grid-column:1/13">加载中…</div>
-    <div class="wrap" id="tag-wrap" style="display:none;"></div>
-  </div>
-</section>
+  <section class="tag-wall">
+    <div class="grid">
+      <div class="loading" id="tag-loading" style="grid-column:1/13">加载中…</div>
+      <div class="wrap" id="tag-wrap" style="display:none;"></div>
+    </div>
+  </section>
 
-<footer class="footer" id="footer"></footer>
+  <footer class="footer" id="footer"></footer>
 
-<script src="js/api.js"></script>
-<script src="js/common.js"></script>
-<script>
-initPage('tags').then(loadTags);
+  <script src="js/api.js?v=4"></script>
+  <script src="js/common.js?v=4"></script>
+  <script>
+    initPage('tags').then(loadTags);
 
-async function loadTags() {
-  try {
-    const tags = await api.get('/api/tags');
-    const wrap = document.getElementById('tag-wrap');
-    const loading = document.getElementById('tag-loading');
-    loading.style.display = 'none';
-    wrap.style.display = 'flex';
-    if (!tags.length) { wrap.innerHTML = '<div class="empty">暂无标签</div>'; return; }
-    wrap.innerHTML = tags.map(t => `
-      <a class="tag-item" href="articles.html?tag=${encodeURIComponent(t.name)}">
-        # ${esc(t.name)} <span class="n">${t.articleCount ?? 0}</span>
-      </a>`).join('');
-  } catch (e) {
-    document.getElementById('tag-loading').innerHTML = '加载失败: ' + esc(e.message);
-  }
-}
-</script>
+    async function loadTags() {
+      try {
+        const tags = await api.get('/api/tags');
+        const wrap = document.getElementById('tag-wrap');
+        const loading = document.getElementById('tag-loading');
+        loading.style.display = 'none';
+        wrap.style.display = 'flex';
+        if (!tags.length) { wrap.innerHTML = '<div class="empty">暂无标签</div>'; return; }
+
+        // 标签云字号：按文章数映射大小（少的标签字号小、颜色浅；多的字号大、红色强调）
+        const counts = tags.map(t => t.articleCount ?? 0);
+        const max = Math.max(...counts, 1);
+        const min = Math.min(...counts, 0);
+        // 字号范围 12px - 26px；归一化到 [0,1] 再映射
+        const sizeFor = (c) => 12 + Math.round((c - min) / Math.max(1, max - min) * 14);
+        // 文章数为 0 的标签置灰；>0 按热度从墨黑到红色过渡
+        const colorFor = (c) => {
+          if (c === 0) return 'var(--gray-a)';
+          if (c >= max * 0.6) return 'var(--red)';
+          return 'var(--ink)';
+        };
+
+        wrap.innerHTML = tags.map(t => {
+          const c = t.articleCount ?? 0;
+          const size = sizeFor(c);
+          return `<a class="tag-item" href="articles.html?tag=${encodeURIComponent(t.name)}"
+        style="font-size:${size}px;color:${colorFor(c)};font-weight:${c >= max * 0.4 ? 700 : 500};">
+        # ${esc(t.name)} <span class="n">${c}</span>
+      </a>`;
+        }).join('');
+      } catch (e) {
+        document.getElementById('tag-loading').innerHTML = '加载失败: ' + esc(e.message);
+      }
+    }
+  </script>
 </body>
+
 </html>

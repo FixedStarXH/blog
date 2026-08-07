@@ -113,7 +113,7 @@ func (d *ArticleDAO) Delete(db *gorm.DB, id, authorID uint) error {
 }
 
 // AddView 浏览量 +1（IP 防刷 + 事务）
-func (d *ArticleDAO) AddView(db *gorm.DB, articleID uint, ip string) error {
+func (d *ArticleDAO) AddView(db *gorm.DB, articleID uint, ip string) (int64, error) {
 	startOfDay := time.Now().Truncate(24 * time.Hour)
 
 	var count int64
@@ -122,10 +122,14 @@ func (d *ArticleDAO) AddView(db *gorm.DB, articleID uint, ip string) error {
 		Count(&count)
 
 	if count > 0 {
-		return nil
+		// 同 IP 当天已访问过：不重复+1，但仍返回当前浏览量
+		var v int64
+		db.Model(&model.Article{}).Where("id = ?", articleID).
+			Select("view_count").Scan(&v)
+		return v, nil
 	}
 
-	return db.Transaction(func(tx *gorm.DB) error {
+	err := db.Transaction(func(tx *gorm.DB) error {
 		// A. 插明细
 		if err := tx.Create(&model.ArticleView{
 			ArticleID: articleID,
@@ -142,16 +146,30 @@ func (d *ArticleDAO) AddView(db *gorm.DB, articleID uint, ip string) error {
 		}
 		return nil
 	})
+	if err != nil {
+		return 0, err
+	}
+	var v int64
+	db.Model(&model.Article{}).Where("id = ?", articleID).
+		Select("view_count").Scan(&v)
+	return v, nil
 }
 
-func (d *ArticleDAO) Like(db *gorm.DB, articleID uint, ip string) error {
+// LikeResult 点赞结果：新点赞数 + 是否当前用户已点赞
+type LikeResult struct {
+	LikeCount int64 `json:"likeCount"`
+	Already   bool  `json:"already"` // true=已点过赞（本次是取消）
+}
+
+func (d *ArticleDAO) Like(db *gorm.DB, articleID uint, ip string) (*LikeResult, error) {
 	var count int64
 	db.Model(&model.ArticleLike{}).
 		Where("article_id = ? AND ip = ?", articleID, ip).
 		Count(&count)
 
 	if count > 0 {
-		return db.Transaction(func(tx *gorm.DB) error {
+		// 已点过 → 取消点赞
+		err := db.Transaction(func(tx *gorm.DB) error {
 			if err := tx.Unscoped().Where("article_id = ? AND ip = ?", articleID, ip).
 				Delete(&model.ArticleLike{}).Error; err != nil {
 				return err
@@ -160,9 +178,16 @@ func (d *ArticleDAO) Like(db *gorm.DB, articleID uint, ip string) error {
 				Where("id = ?", articleID).
 				UpdateColumn("like_count", gorm.Expr("like_count - 1")).Error
 		})
+		if err != nil {
+			return nil, err
+		}
+		var v int64
+		db.Model(&model.Article{}).Where("id = ?", articleID).
+			Select("like_count").Scan(&v)
+		return &LikeResult{LikeCount: v, Already: true}, nil
 	}
 
-	return db.Transaction(func(tx *gorm.DB) error {
+	err := db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&model.ArticleLike{
 			ArticleID: articleID,
 			IP:        ip,
@@ -173,6 +198,13 @@ func (d *ArticleDAO) Like(db *gorm.DB, articleID uint, ip string) error {
 			Where("id = ?", articleID).
 			UpdateColumn("like_count", gorm.Expr("like_count + 1")).Error
 	})
+	if err != nil {
+		return nil, err
+	}
+	var v int64
+	db.Model(&model.Article{}).Where("id = ?", articleID).
+		Select("like_count").Scan(&v)
+	return &LikeResult{LikeCount: v, Already: false}, nil
 }
 
 func (d *ArticleDAO) FindHot(db *gorm.DB, limit int) ([]model.Article, error) {
@@ -311,6 +343,28 @@ func (d *ArticleDAO) UpdateStatus(db *gorm.DB, id uint, status int, rejectReason
 			"status":        status,
 			"reject_reason": rejectReason, // 通过时传空串，驳回时传原因
 		}).Error
+}
+
+// UpdateStatusBatch 批量改状态（后台批量发布/草稿/驳回用）
+func (d *ArticleDAO) UpdateStatusBatch(db *gorm.DB, ids []uint, status int) (int64, error) {
+	result := db.Model(&model.Article{}).
+		Where("id IN ?", ids).
+		Update("status", status)
+	return result.RowsAffected, result.Error
+}
+
+// UpdateTopBatch 批量改置顶（后台批量置顶/取消置顶用）
+func (d *ArticleDAO) UpdateTopBatch(db *gorm.DB, ids []uint, isTop bool) (int64, error) {
+	result := db.Model(&model.Article{}).
+		Where("id IN ?", ids).
+		Update("is_top", isTop)
+	return result.RowsAffected, result.Error
+}
+
+// DeleteBatch 批量删除（后台批量删除用，软删除）
+func (d *ArticleDAO) DeleteBatch(db *gorm.DB, ids []uint) (int64, error) {
+	result := db.Where("id IN ?", ids).Delete(&model.Article{})
+	return result.RowsAffected, result.Error
 }
 
 // UpdateByID 按 ID 直接更新（后台文章编辑用，不校验作者）

@@ -38,6 +38,17 @@ func (c *LinkController) GetLinks(ctx *gin.Context) {
 	utils.Success(ctx, links)
 }
 
+// GetPublicLinks 前台公开友链列表（仅 enabled=true）
+// GET /api/links
+func (c *LinkController) GetPublicLinks(ctx *gin.Context) {
+	links, err := c.service.ListPublic()
+	if err != nil {
+		utils.Error(ctx, "获取友链失败")
+		return
+	}
+	utils.Success(ctx, links)
+}
+
 // CreateLink 新增友链
 // POST /api/admin/links
 func (c *LinkController) CreateLink(ctx *gin.Context) {

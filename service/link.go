@@ -23,6 +23,21 @@ func (s *LinkService) List() ([]model.Link, error) {
 	return s.dao.FindAll(s.db)
 }
 
+// ListPublic 前台公开列表：只返回 enabled=true 的（不暴露禁用链接）
+func (s *LinkService) ListPublic() ([]model.Link, error) {
+	all, err := s.dao.FindAll(s.db)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]model.Link, 0, len(all))
+	for _, l := range all {
+		if l.Enabled {
+			out = append(out, l)
+		}
+	}
+	return out, nil
+}
+
 func (s *LinkService) Create(name, url, description string, sort int, enabled bool) (*model.Link, error) {
 	link := &model.Link{
 		Name:        name,

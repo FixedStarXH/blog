@@ -110,11 +110,11 @@ func (s *ArticleService) DeleteMyArticle(id, authorID uint) error {
 	return s.dao.Delete(s.db, id, authorID)
 }
 
-func (s *ArticleService) AddView(articleID uint, ip string) error {
+func (s *ArticleService) AddView(articleID uint, ip string) (int64, error) {
 	return s.dao.AddView(s.db, articleID, ip)
 }
 
-func (s *ArticleService) Like(articleID uint, ip string) error {
+func (s *ArticleService) Like(articleID uint, ip string) (*dao.LikeResult, error) {
 	return s.dao.Like(s.db, articleID, ip)
 }
 
@@ -306,4 +306,26 @@ func (s *ArticleService) AdminDeleteArticle(id uint) error {
 		return err
 	}
 	return s.db.Delete(&model.Article{}, id).Error
+}
+
+// BatchArticleOp 后台批量操作
+// action: publish 发布 / draft 草稿 / top 置顶 / untop 取消置顶 / delete 删除
+func (s *ArticleService) BatchArticleOp(ids []uint, action string) (int64, error) {
+	if len(ids) == 0 {
+		return 0, errors.New("请先勾选文章")
+	}
+	switch action {
+	case "publish":
+		return s.dao.UpdateStatusBatch(s.db, ids, model.ArticleStatusPublished)
+	case "draft":
+		return s.dao.UpdateStatusBatch(s.db, ids, model.ArticleStatusDraft)
+	case "top":
+		return s.dao.UpdateTopBatch(s.db, ids, true)
+	case "untop":
+		return s.dao.UpdateTopBatch(s.db, ids, false)
+	case "delete":
+		return s.dao.DeleteBatch(s.db, ids)
+	default:
+		return 0, errors.New("不支持的操作类型")
+	}
 }
