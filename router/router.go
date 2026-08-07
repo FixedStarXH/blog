@@ -42,6 +42,7 @@ func Init(r *gin.Engine) {
 	commentCtl := controller.NewCommentController(commentSvc)
 	settingCtl := controller.NewSettingController(settingSvc)
 	uploadCtl := controller.NewUploadController()
+	feedCtl := controller.NewFeedController(articleSvc)
 
 	api := r.Group("/api")
 	{
@@ -113,6 +114,10 @@ func Init(r *gin.Engine) {
 	webDir := "./web"
 	r.Static("/web", webDir)
 	r.Static("/uploads", "./uploads")
+
+	// RSS 订阅 + Sitemap（放根路径：搜索引擎/订阅器习惯请求域名根路径）
+	r.GET("/feed.xml", feedCtl.Rss)
+	r.GET("/sitemap.xml", feedCtl.Sitemap)
 
 	// 根路径 → 首页
 	r.GET("/", func(c *gin.Context) {
