@@ -229,13 +229,18 @@ body.dark .topbar {
 }
 
 .hero-title {
-  grid-column: 1 / 14;
+  grid-column: 1 / 13;
   margin-top: 56px;
   font-size: var(--f-display);
   font-weight: 900;
-  line-height: .88;
+  line-height: .95;
   letter-spacing: -.045em;
   text-transform: uppercase;
+}
+
+/* 三个词作为整体块换行，避免中间被拆开 */
+.hero-title>span {
+  display: inline-block;
   white-space: nowrap;
 }
 
