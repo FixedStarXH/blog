@@ -51,6 +51,7 @@ func Init(r *gin.Engine) {
 	imageCtl := controller.NewImageController(imageSvc)
 	linkCtl := controller.NewLinkController(linkSvc)
 	dashboardCtl := controller.NewDashboardController(dashboardSvc)
+	rssCtl := controller.NewRSSController(articleSvc, settingSvc)
 
 	api := r.Group("/api")
 	{
@@ -72,6 +73,7 @@ func Init(r *gin.Engine) {
 		api.GET("/settings", settingCtl.GetSiteSettings)
 		api.GET("/quote", settingCtl.GetDailyQuote)
 		api.GET("/links", linkCtl.GetPublicLinks) // 公开友链列表（前台 about 页用）
+		api.GET("/rss.xml", rssCtl.Feed)          // RSS 2.0 订阅源
 
 		// 联调补齐：前端页面使用的路径/结构与后端契约（home.js/common.js/about.html/archive.html）
 		api.GET("/site", settingCtl.GetSiteInfo)            // 前台站点信息（含统计数字）
@@ -139,6 +141,7 @@ func Init(r *gin.Engine) {
 		admin.POST("/categories", categoryCtl.CreateCategory)
 		admin.PUT("/categories/:id", categoryCtl.UpdateCategory)
 		admin.DELETE("/categories/:id", categoryCtl.DeleteCategory)
+		admin.GET("/tags", tagCtl.GetTagList) // 后台标签管理列表（admin/tags.html 契约）
 		admin.POST("/tags", tagCtl.CreateTag)
 		admin.PUT("/tags/:id", tagCtl.UpdateTag)
 		admin.DELETE("/tags/:id", tagCtl.DeleteTag)

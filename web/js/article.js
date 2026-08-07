@@ -171,7 +171,7 @@ function renderArticle() {
       <div class="head"><h3>评论</h3><span class="n" id="comment-total">0 条</span></div>
       <form class="comment-form" id="comment-form" onsubmit="submitComment(event)">
         <div class="row">
-          <input type="text" id="c-name" placeholder="昵称(2-20 字)" maxlength="20">
+          <input type="text" id="c-name" placeholder="昵称(可选，不填默认游客)" maxlength="20">
           <input type="email" id="c-email" placeholder="邮箱(可选)" style="display:none">
         </div>
         <div class="emoji-picker">
@@ -180,7 +180,7 @@ function renderArticle() {
           <div class="emoji-panel" id="emoji-panel"></div>
         </div>
         <div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;">
-          <span style="font-size:12px;color:var(--gray-a);">评论需审核后展示</span>
+          <span style="font-size:12px;color:var(--gray-a);">评论免审核，直接展示</span>
           <button class="submit" type="submit">发表评论</button>
         </div>
       </form>
@@ -193,6 +193,33 @@ function renderArticle() {
   initKeyboardNav();
   initLightbox();
   initEmojiPicker();
+  fixBrokenImages();  // 图片加载失败 → 彩色占位符
+}
+
+// 图片加载失败兜底：CSDN 防盗链导致裂图 → 直接隐藏，并在后方插入 CSDN 原文链接
+function fixBrokenImages() {
+  const csdnUser = 'FixedstarXH';
+  const imgs = document.querySelectorAll('#article-content img');
+  if (!imgs.length) return;
+  imgs.forEach(img => {
+    if (img.dataset.fixed) return;
+    img.dataset.fixed = '1';
+    img.addEventListener('error', () => {
+      if (img.dataset.fallback) return;
+      img.dataset.fallback = '1';
+      // 隐藏裂图
+      img.style.display = 'none';
+      // 在图片后插入一个 CSDN 原文链接提示
+      const note = document.createElement('div');
+      note.className = 'img-fallback';
+      note.innerHTML = '<a href="https://blog.csdn.net/' + csdnUser + '" target="_blank" rel="noopener" style="font-size:12px;color:var(--gray-a);border:1px dashed var(--line);display:inline-block;padding:8px 14px;margin:8px 0;">[图片加载失败] 点击查看 CSDN 原文 →</a>';
+      img.parentNode.insertBefore(note, img.nextSibling);
+    });
+    // 立即检查已失败的图
+    if (img.complete && img.naturalWidth === 0) {
+      img.dispatchEvent(new Event('error'));
+    }
+  });
 }
 
 // 代码高亮：在文章渲染完成后调用 hljs
@@ -493,14 +520,14 @@ async function submitComment(e) {
   e.preventDefault();
   const name = document.getElementById('c-name').value.trim();
   const content = document.getElementById('c-content').value.trim();
-  if (!name || name.length < 2) return toast('请填写昵称(2-20 字)', true);
+  // 昵称非必填：留空时后端默认"游客"；仅校验内容
   if (!content) return toast('评论内容不能为空', true);
 
   try {
     await api.post(`/api/articles/${id}/comments`, {
       content, nickname: name, parentId: replyParent,
     });
-    toast('评论已提交,待审核后展示');
+    toast('评论已发布');
     document.getElementById('c-content').value = '';
     replyParent = null;
     document.getElementById('c-content').placeholder = '写下你的评论…';

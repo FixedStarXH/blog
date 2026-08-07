@@ -56,7 +56,7 @@ func NewFeedController(service *service.ArticleService) *FeedController {
 // Rss 生成 RSS 2.0（最新 20 篇已发布文章）
 // GET /feed.xml
 func (c *FeedController) Rss(ctx *gin.Context) {
-	articles, _, err := c.service.GetPublishedArticles("", 0, "", "newest", 1, 20)
+	articles, _, err := c.service.GetPublishedArticles("", 0, "", 0, "newest", 1, 20)
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, "生成 RSS 失败")
 		return
@@ -89,7 +89,7 @@ func (c *FeedController) Rss(ctx *gin.Context) {
 // GET /sitemap.xml
 func (c *FeedController) Sitemap(ctx *gin.Context) {
 	// 教学简化：取最新 50 篇；生产环境应循环分页拉全量
-	articles, _, err := c.service.GetPublishedArticles("", 0, "", "newest", 1, 50)
+	articles, _, err := c.service.GetPublishedArticles("", 0, "", 0, "newest", 1, 50)
 	if err != nil {
 		ctx.String(http.StatusInternalServerError, "生成 Sitemap 失败")
 		return

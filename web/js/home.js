@@ -97,12 +97,18 @@ function renderDir(list, total) {
   `).join('');
 }
 
-// 滚动字幕(用分类拼接)
+// 滚动字幕：技术栈关键词跑马灯，· 分隔，两份内容无缝循环
 setTimeout(() => {
-  api.get('/api/categories').then(cats => {
-    const track = document.getElementById('marquee-track');
-    const names = cats.length ? cats.map(c => c.name) : ['Go Backend', 'MySQL Index', 'GORM', 'Gin', 'Swiss Design'];
-    const items = [...names, ...names].map(n => `<span>${esc(n)}</span>`).join('');
-    track.innerHTML = items;
-  }).catch(() => {});
+  const track = document.getElementById('marquee-track');
+  if (!track) return;
+  // 技术栈关键词——比分类名更有"滚动字幕"的科技感
+  const stack = [
+    'GO BACKEND', 'GIN', 'GORM', 'MYSQL', 'REDIS',
+    'DOCKER', 'JWT', 'TCP/IP', 'GOROUTINE', 'CHANNEL',
+    'CONTEXT', 'VUE 3', 'SWISS DESIGN'
+  ];
+  // 每个关键词用 · 分隔，拼成一整段文本
+  const oneLap = stack.map(s => `<span>${esc(s)}</span>`).join('<i>·</i>');
+  // 复制两份实现无缝循环（translateX -50% 移过一份的宽度）
+  track.innerHTML = oneLap + oneLap;
 }, 0);

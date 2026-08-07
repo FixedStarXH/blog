@@ -15,6 +15,9 @@
   --red: #E53012;
   --red-2: #C1240B;
   --red-bg: #FBE9E3;
+  --yellow: #FFE066;
+  --yellow-2: #FFD43B;
+  --teal: #2EC4B6;
   --white: #FFFFFF;
 
   --sans: "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
@@ -36,6 +39,9 @@ body.dark {
   --line: #2E2D29;
   --red: #FF4D2E;
   --red-bg: #2B1A15;
+  --yellow: #FFE066;
+  --yellow-2: #FFD43B;
+  --teal: #2EC4B6;
   --white: #1E1E1E;
 }
 
@@ -134,27 +140,30 @@ body.dark .topbar {
   letter-spacing: .01em;
 }
 
-.logo .tag {
-  width: 22px;
-  height: 22px;
-  background: var(--red);
+.logo .logo-mark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  font-size: 11px;
+  color: var(--ink);
+  transition: transform .2s ease;
+}
+
+.logo:hover .logo-mark {
+  transform: rotate(-8deg);
 }
 
 .nav {
-  grid-column: 8 / 13;
+  grid-column: 4 / 13;
   display: flex;
   justify-content: flex-end;
-  gap: 26px;
+  gap: 18px;
   font-size: 11px;
-  letter-spacing: .16em;
+  letter-spacing: .12em;
   text-transform: uppercase;
   font-weight: 600;
   align-items: center;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .nav a {
@@ -233,11 +242,28 @@ body.dark .topbar {
   transform: translateY(-7px) rotate(-45deg);
 }
 
-/* ============ 返回顶部按钮 ============ */
-.back-top {
+/* ============ 浮动导航组（返回 + 回顶） ============ */
+.float-nav {
   position: fixed;
   right: 28px;
   bottom: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(20px);
+  transition: opacity .25s ease, transform .25s ease;
+  z-index: 998;
+}
+
+.float-nav.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.float-nav button {
   width: 44px;
   height: 44px;
   background: var(--ink);
@@ -246,22 +272,30 @@ body.dark .topbar {
   font-size: 18px;
   font-weight: 700;
   cursor: pointer;
-  z-index: 998;
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(20px);
-  transition: opacity .25s ease, transform .25s ease, background .15s ease;
   box-shadow: 4px 4px 0 var(--red);
+  transition: background .15s ease, transform .15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
 }
 
-.back-top.show {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0);
-}
-
-.back-top:hover {
+.float-nav button:hover {
   background: var(--red);
+  transform: translate(-1px, -1px);
+}
+
+.fn-back {
+  font-size: 20px !important;
+}
+
+.fn-top {
+  font-size: 20px !important;
+}
+
+/* 旧 back-top 元素不再使用（已改 float-nav） */
+.back-top {
+  display: none;
 }
 
 /* ============ Hero ============ */
@@ -382,9 +416,10 @@ body.dark .marquee {
 
 .marquee .track {
   display: flex;
-  gap: 48px;
   width: max-content;
-  animation: scroll 22s linear infinite;
+  /* 轨道宽度等于全部内容，不被换行 */
+  white-space: nowrap;
+  animation: scroll 18s linear infinite;
 }
 
 .marquee .track span {
@@ -393,20 +428,22 @@ body.dark .marquee {
   letter-spacing: .22em;
   text-transform: uppercase;
   font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 48px;
+  padding: 0 24px;
+  /* 关键词左右留白 */
 }
 
-.marquee .track span::after {
-  content: "●";
-  font-size: 7px;
+/* · 分隔符：红色小点，比圆点更轻盈，节奏感更强 */
+.marquee .track i {
+  font-style: normal;
   color: var(--red);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 @keyframes scroll {
   to {
     transform: translateX(-50%);
+    /* 移过一半宽度 = 一份内容的宽度 */
   }
 }
 
@@ -529,6 +566,23 @@ body.dark .marquee {
 
 .cat:hover .name {
   transform: translateX(6px);
+}
+
+.cat:hover .bar {
+  transform: scaleX(1);
+}
+
+/* 选中状态：仅下边框高亮，文字加深，不要全红背景 */
+.cat.active .idx {
+  color: var(--red);
+}
+
+.cat.active .name {
+  color: var(--ink);
+}
+
+.cat.active .bar {
+  transform: scaleX(1);
 }
 
 .cat:hover .bar {
@@ -987,11 +1041,54 @@ body.dark .entry:hover .date {
   align-items: center;
   gap: 8px;
   padding: 10px 18px;
-  border: 1px solid var(--ink);
+  border: 2px solid var(--ink);
+  border-radius: 8px;
   background: var(--white);
   font-size: 14px;
   font-weight: 600;
+  cursor: default;
   transition: all .18s ease;
+}
+
+/* 可点击标签：彩色悬停 + 选中 */
+.tag-clickable {
+  cursor: pointer;
+  border-width: 2px;
+  border-style: solid;
+  border-color: var(--ink);
+  background: var(--white);
+  transition: all .2s cubic-bezier(.4, 0, .2, 1);
+}
+
+.tag-clickable:hover {
+  transform: translateY(-4px) rotate(-2deg) scale(1.06);
+  box-shadow: 4px 4px 0 var(--tag-border);
+  background: var(--tag-bg);
+  border-color: var(--tag-border);
+  color: var(--tag-text);
+}
+
+.tag-clickable:hover .n {
+  color: var(--tag-text);
+  opacity: .7;
+}
+
+/* 偶数项 hover 反向旋转，错落感更强（跟技术栈 chips 一致） */
+.tag-clickable:nth-child(even):hover {
+  transform: translateY(-4px) rotate(2deg) scale(1.06);
+}
+
+/* 选中态 */
+.tag-clickable.active {
+  background: var(--tag-border) !important;
+  border-color: var(--tag-border) !important;
+  color: #fff !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .15);
+}
+
+.tag-clickable.active .n {
+  color: rgba(255, 255, 255, .75) !important;
 }
 
 .tag-item .n {
@@ -1001,13 +1098,39 @@ body.dark .entry:hover .date {
 }
 
 .tag-item:hover {
-  background: var(--red);
-  color: #fff;
-  border-color: var(--red);
+  background: var(--yellow);
+  color: var(--ink);
+  border-color: var(--ink);
 }
 
 .tag-item:hover .n {
-  color: rgba(255, 255, 255, .8);
+  color: var(--ink);
+  opacity: .6;
+}
+
+/* 标签筛选结果 */
+.tag-results {
+  border-top: 1px solid var(--ink);
+  padding: 40px 0 60px;
+  background: var(--paper-2);
+}
+
+.tag-results-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.tag-results-head h2 {
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.tag-results-head .n {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--gray-6);
 }
 
 /* ============ 归档 ============ */
@@ -1103,13 +1226,26 @@ body.dark .entry:hover .date {
 .about-body .avatar {
   width: 100%;
   aspect-ratio: 1;
-  background: var(--red);
-  color: #fff;
+  border: 3px solid var(--ink);
+  color: var(--ink);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 60px;
+  font-size: 64px;
   font-weight: 900;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 头像装饰：右上角红色小方块，点睛而不抢眼 */
+.about-body .avatar::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 14px;
+  height: 14px;
+  background: var(--red);
 }
 
 .skill-list {
@@ -1335,6 +1471,24 @@ body.dark .entry:hover .date {
 
 .article-content-wrap {
   grid-column: 1/9;
+}
+
+/* 返回文章列表链接 */
+.back-link {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--gray-6);
+  margin-bottom: 20px;
+  padding: 6px 14px 6px 0;
+  border-bottom: 1px solid var(--line);
+  transition: color .15s ease, border-color .15s ease, transform .15s ease;
+}
+
+.back-link:hover {
+  color: var(--red);
+  border-color: var(--red);
+  transform: translateX(-4px);
 }
 
 .article-side {
@@ -2123,10 +2277,13 @@ body.dark .entry:hover .date {
     white-space: normal;
   }
 
-  /* 返回顶部按钮在窄屏略小，避免遮挡内容 */
-  .back-top {
+  /* 浮动导航按钮在窄屏略小 */
+  .float-nav {
     right: 16px;
     bottom: 16px;
+  }
+
+  .float-nav button {
     width: 40px;
     height: 40px;
     box-shadow: 3px 3px 0 var(--red);
@@ -2698,9 +2855,126 @@ body.dark mark {
 }
 
 /* ============================================================
+   技能芯片（关于页技术栈展示）
+   hover 旋转+缩放+黄色背景，比普通标签更有趣味性
+   ============================================================ */
+.skill-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 20px 0 28px;
+}
+
+.skill-chip {
+  padding: 10px 16px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: var(--paper);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  cursor: default;
+  user-select: none;
+  transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+
+.skill-chip:hover {
+  transform: translateY(-4px) rotate(-2deg) scale(1.06);
+  box-shadow: 4px 4px 0 var(--ink);
+  background: var(--yellow);
+}
+
+/* 偶数项 hover 反向旋转，错落感更强 */
+.skill-chip:nth-child(even):hover {
+  transform: translateY(-4px) rotate(2deg) scale(1.06);
+}
+
+body.dark .skill-chip {
+  background: var(--paper-2);
+}
+
+/* ============================================================
+   Hover 交互增强（浮起 + 硬阴影 + 旋转，Neo-Brutalist 风格）
+   适配博客现有类名，保留原配色，只增加立体感
+   ============================================================ */
+
+/* 导航项：黄色块高亮（替换原来的纯变色） */
+.nav a:hover,
+.nav a.active {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--yellow) 45%, transparent);
+}
+
+/* 标签 chip：保留红色 hover，加旋转 + 缩放（技能芯片风格） */
+.tag-item {
+  transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.tag-item:hover {
+  transform: rotate(-2deg) scale(1.04);
+}
+
+/* 偶数项反向旋转，错落感更强 */
+.tag-item:nth-child(even):hover {
+  transform: rotate(2deg) scale(1.04);
+}
+
+/* 文章列表项：浮起 + 青色投影（保留标题右移效果） */
+.entry {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.entry:hover {
+  transform: translate(-3px, -3px);
+  box-shadow: 6px 6px 0 var(--teal);
+}
+
+/* 图标按钮：旋转 5 度（主题切换、汉堡按钮） */
+.theme-btn,
+.nav-toggle {
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.theme-btn:hover,
+.nav-toggle:hover {
+  transform: rotate(-5deg);
+}
+
+/* 首页头条精选：浮起 + 红色投影 */
+.feature {
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
+}
+
+.feature:hover {
+  transform: translate(-4px, -4px);
+  box-shadow: 12px 12px 0 var(--red);
+}
+
+/* 通用按钮：浮起 + 硬阴影，按下反向位移 */
+.btn {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.btn:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.btn:active {
+  transform: translate(1px, 1px);
+  box-shadow: none;
+}
+
+/* 浮动按钮增强 hover */
+.back-top:hover {
+  transform: translateY(0) rotate(-5deg);
+}
+
+/* ============================================================
    打印样式（Ctrl+P 友好输出，只打印文章正文）
    ============================================================ */
 @media print {
+
   .topbar,
   .footer,
   .reading-progress,
@@ -2708,7 +2982,7 @@ body.dark mark {
   .comments,
   .pn,
   .related,
-  .back-top,
+  .float-nav,
   .search-overlay,
   .lightbox,
   .a-tags,
@@ -2775,7 +3049,8 @@ body.dark mark {
     content: "";
   }
 
-  h2, h3 {
+  h2,
+  h3 {
     page-break-after: avoid;
   }
 

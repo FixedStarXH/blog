@@ -17,9 +17,9 @@ func NewCommentController(service *service.CommentService) *CommentController {
 	return &CommentController{service: service}
 }
 
-// 发表评论请求体：昵称 + 内容都必填（游客版）
+// 发表评论请求体：昵称可选（免昵称），内容必填
 type addCommentRequest struct {
-	Nickname string `json:"nickname" binding:"required"` // 游客昵称，必填
+	Nickname string `json:"nickname"`                    // 游客昵称，可选
 	Content  string `json:"content" binding:"required"`  // 评论内容，必填
 }
 

@@ -15,7 +15,7 @@ func NewArticleDAO() *ArticleDAO {
 	return &ArticleDAO{}
 }
 
-func (d *ArticleDAO) FindPublished(db *gorm.DB, keyword string, authorID uint, tag string, sortBy string, page, pageSize int) ([]model.Article, int64, error) {
+func (d *ArticleDAO) FindPublished(db *gorm.DB, keyword string, authorID uint, tag string, categoryID uint, sortBy string, page, pageSize int) ([]model.Article, int64, error) {
 	var articles []model.Article
 	var total int64
 
@@ -25,6 +25,10 @@ func (d *ArticleDAO) FindPublished(db *gorm.DB, keyword string, authorID uint, t
 	}
 	if authorID > 0 {
 		query = query.Where("author_id = ?", authorID)
+	}
+	// 分类过滤：categoryId > 0 时按分类筛选
+	if categoryID > 0 {
+		query = query.Where("category_id = ?", categoryID)
 	}
 	if tag != "" {
 		query = query.Joins("JOIN article_tags at ON at.article_id = articles.id").
@@ -51,7 +55,8 @@ func (d *ArticleDAO) FindPublished(db *gorm.DB, keyword string, authorID uint, t
 
 func (d *ArticleDAO) FindByID(db *gorm.DB, id uint) (*model.Article, error) {
 	var article model.Article
-	err := db.Preload("Author").Preload("Category").First(&article, id).Error
+	// Preload Tags：文章详情页要展示标签（缺这行会导致详情接口 tags 永远为空）
+	err := db.Preload("Author").Preload("Category").Preload("Tags").First(&article, id).Error
 	if err != nil {
 		return nil, err
 	}

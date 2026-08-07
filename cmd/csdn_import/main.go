@@ -391,7 +391,7 @@ func main() {
 	}
 	fmt.Printf("==> 共发现 %d 篇文章\n", len(metas))
 
-	// ④ 逐篇抓详情 + 导入
+	// ④ 逐篇抓详情 + 导入（含图片提取与上传）
 	imported, skipped, failed := 0, 0, 0
 	consecutiveFails := 0 // 连续失败计数：连续 3 篇失败 = 大概率触发反爬（521），提前停，避免无效重试
 	for i, m := range metas {

@@ -20,14 +20,14 @@ func NewArticleService(dao *dao.ArticleDAO, db *gorm.DB) *ArticleService {
 	return &ArticleService{dao: dao, db: db}
 }
 
-func (s *ArticleService) GetPublishedArticles(keyword string, authorID uint, tag, sortBy string, page, pageSize int) ([]model.Article, int64, error) {
+func (s *ArticleService) GetPublishedArticles(keyword string, authorID uint, tag string, categoryID uint, sortBy string, page, pageSize int) ([]model.Article, int64, error) {
 	if pageSize <= 0 || pageSize > 50 {
 		pageSize = 10
 	}
 	if page <= 0 {
 		page = 1
 	}
-	return s.dao.FindPublished(s.db, keyword, authorID, tag, sortBy, page, pageSize)
+	return s.dao.FindPublished(s.db, keyword, authorID, tag, categoryID, sortBy, page, pageSize)
 
 }
 

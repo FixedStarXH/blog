@@ -26,7 +26,7 @@ function renderTopbar(activeName) {
     ? `<a href="admin/dashboard.html" data-nav="admin"><i>◎</i> 管理</a>` : '';
   topbar.innerHTML = `
     <div class="grid">
-      <a class="logo" href="index.html"><span class="tag">◎</span>BLOG<sup>®</sup></a>
+      <a class="logo" href="index.html"><span class="logo-mark"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="2.5" y="2.5" width="19" height="19" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.5" fill="#E53012"/></svg></span>BLOG<sup>®</sup></a>
       <nav class="nav" id="nav-menu">
         <a href="index.html" data-nav="home"><i>01</i> 首页</a>
         <a href="articles.html" data-nav="archive"><i>02</i> 文章</a>
@@ -89,7 +89,7 @@ function renderFooter() {
       <div class="copy">© 2026 <b>BLOG-SYSTEM</b> — Built with Go + Gin + Swiss</div>
       <div class="links">
         <a href="about.html">关于</a>
-        <a href="/rss.xml" target="_blank">RSS</a>
+        <a href="/api/rss.xml" target="_blank">RSS</a>
         <a href="register.html">注册</a>
         <a href="admin/login.html">后台</a>
       </div>
@@ -97,23 +97,42 @@ function renderFooter() {
   `;
 }
 
-// 渲染返回顶部按钮：滚动 > 400px 显示，点击平滑滚回顶部
+// 渲染浮动导航组：返回按钮（文章页）+ 返回顶部（全局）
 function renderBackToTop() {
-  if (document.getElementById('back-top')) return;
-  const btn = document.createElement('button');
-  btn.id = 'back-top';
-  btn.className = 'back-top';
-  btn.innerHTML = '↑';
-  btn.title = '返回顶部';
-  btn.setAttribute('aria-label', '返回顶部');
-  document.body.appendChild(btn);
+  if (document.getElementById('float-nav')) return;
+  const nav = document.createElement('div');
+  nav.id = 'float-nav';
+  nav.className = 'float-nav';
+  // 返回按钮：只有文章详情页显示
+  const isArticle = location.pathname.includes('/article.html') || !!document.getElementById('article-content');
+  nav.innerHTML = ''
+    + (isArticle ? '<button class="fn-back" title="返回文章列表" aria-label="返回"><span>←</span></button>' : '')
+    + '<button class="fn-top" title="返回顶部" aria-label="返回顶部">↑</button>';
+  document.body.appendChild(nav);
+
+  const backBtn = nav.querySelector('.fn-back');
+  const topBtn = nav.querySelector('.fn-top');
+
   const onScroll = () => {
-    btn.classList.toggle('show', window.scrollY > 400);
+    const show = window.scrollY > 400;
+    nav.classList.toggle('show', show);
   };
   window.addEventListener('scroll', onScroll, { passive: true });
-  btn.addEventListener('click', () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  });
+
+  if (topBtn) {
+    topBtn.addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  }
+  if (backBtn) {
+    backBtn.addEventListener('click', () => {
+      if (document.referrer && document.referrer.includes(location.host)) {
+        history.back();
+      } else {
+        location.href = 'articles.html';
+      }
+    });
+  }
   onScroll();
 }
 
@@ -478,5 +497,15 @@ async function initPage(activeName) {
   // 后台页面是独立布局，不在 topbar 体系内，跳过懒加载
   if (!location.pathname.includes('/admin/')) {
     initLazyImages();
+    loadBgFlow(); // 前台页面才启用流动线条背景
   }
+}
+
+// 动态加载背景流动线条脚本（前台所有页面共享，避免逐页改 <script>）
+function loadBgFlow() {
+  if (document.getElementById('bg-flow-script')) return;
+  const s = document.createElement('script');
+  s.id = 'bg-flow-script';
+  s.src = 'js/bg-flow.js?v=2';
+  document.body.appendChild(s);
 }

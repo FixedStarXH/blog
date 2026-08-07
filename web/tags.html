@@ -1,12 +1,12 @@
-﻿﻿<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>标签墙 — LUMI</title>
-  <meta name="description" content="全部标签,按标签浏览文章。">
-  <link rel="stylesheet" href="css/style.css?v=4">
+  <meta name="description" content="全部标签，按标签浏览文章。">
+  <link rel="stylesheet" href="css/style.css?v=12">
 </head>
 
 <body>
@@ -23,52 +23,189 @@
 
   <section class="tag-wall">
     <div class="grid">
+      <div class="tag-wall-hint" id="tag-hint"
+        style="grid-column:1/13;text-align:center;font-size:12px;color:var(--gray-a);margin-bottom:12px;">
+        点击标签多选筛选文章（已选：<b id="tag-sel-count">0</b>）&nbsp;&nbsp;·&nbsp;&nbsp;<a href="javascript:;"
+          onclick="clearTagFilter()" style="color:var(--red);">清除筛选</a></div>
       <div class="loading" id="tag-loading" style="grid-column:1/13">加载中…</div>
       <div class="wrap" id="tag-wrap" style="display:none;"></div>
     </div>
   </section>
 
+  <!-- 筛选结果区域 -->
+  <section class="tag-results" id="tag-results" style="display:none;">
+    <div class="grid">
+      <div class="tag-results-head" style="grid-column:1/13;">
+        <h2>筛选结果</h2>
+        <span class="n"><b id="tag-result-total">0</b> 篇</span>
+      </div>
+      <div id="tag-result-list" style="grid-column:1/13;"></div>
+    </div>
+  </section>
+
   <footer class="footer" id="footer"></footer>
 
-  <script src="js/api.js?v=4"></script>
-  <script src="js/common.js?v=4"></script>
+  <script src="js/api.js?v=9"></script>
+  <script src="js/common.js?v=12"></script>
+  <!-- v2: 强化多选、科技栈风格hover -->
   <script>
-    initPage('tags').then(loadTags);
+    console.log('[tags] 脚本已加载 v2');
+
+    let allTags = [];
+    let selectedTags = [];
+    const tagColors = [
+      { bg: '#FFE0E0', border: '#E53012', text: '#E53012' },    // 红
+      { bg: '#DDE8FF', border: '#2563EB', text: '#2563EB' },    // 蓝
+      { bg: '#D5F5E3', border: '#16A34A', text: '#16A34A' },    // 绿
+      { bg: '#FFE5D0', border: '#EA580C', text: '#EA580C' },    // 橙
+      { bg: '#E8DDFF', border: '#7C3AED', text: '#7C3AED' },    // 紫
+      { bg: '#FFDDE8', border: '#DB2777', text: '#DB2777' },    // 粉
+      { bg: '#C5F5DB', border: '#059669', text: '#059669' },    // 翠绿
+      { bg: '#FDE8C8', border: '#D97706', text: '#D97706' },    // 琥珀
+      { bg: '#D5ECFF', border: '#0369A1', text: '#0369A1' },    // 天蓝
+      { bg: '#FFDBD8', border: '#DC2626', text: '#DC2626' },    // 深红
+      { bg: '#C5F5EC', border: '#0D9488', text: '#0D9488' },    // 青
+      { bg: '#EDD8FF', border: '#9333EA', text: '#9333EA' },    // 深紫
+      { bg: '#FFF0C0', border: '#CA8A04', text: '#CA8A04' },    // 金
+      { bg: '#C5F0E8', border: '#0F766E', text: '#0F766E' },    // 墨绿
+      { bg: '#FECACA', border: '#B91C1C', text: '#B91C1C' },    // 暗红
+      { bg: '#DBE8FF', border: '#1D4ED8', text: '#1D4ED8' },    // 深蓝
+      { bg: '#FFD5C0', border: '#C2410C', text: '#C2410C' },    // 橘
+      { bg: '#F0D0FF', border: '#A21CAF', text: '#A21CAF' },    // 品红
+    ];
+
+    function getTagColor(idx) {
+      return tagColors[idx % tagColors.length];
+    }
+
+    function updateTagUI() {
+      var el = document.getElementById('tag-sel-count');
+      if (el) el.textContent = selectedTags.length;
+    }
+
+    function clearTagFilter() {
+      selectedTags = [];
+      document.querySelectorAll('.tag-clickable').forEach(function (el) { el.classList.remove('active'); });
+      updateTagUI();
+      filterByTags();
+    }
 
     async function loadTags() {
+      var loading = document.getElementById('tag-loading');
+      var wrap = document.getElementById('tag-wrap');
       try {
-        const tags = await api.get('/api/tags');
-        const wrap = document.getElementById('tag-wrap');
-        const loading = document.getElementById('tag-loading');
+        var tags = await api.get('/api/tags');
+        console.log('[tags] 加载了 ' + tags.length + ' 个标签');
+        allTags = tags;
         loading.style.display = 'none';
         wrap.style.display = 'flex';
-        if (!tags.length) { wrap.innerHTML = '<div class="empty">暂无标签</div>'; return; }
+        if (!tags || !tags.length) {
+          wrap.innerHTML = '<div class="empty" style="grid-column:1/13">暂无标签</div>';
+          return;
+        }
 
-        // 标签云字号：按文章数映射大小（少的标签字号小、颜色浅；多的字号大、红色强调）
-        const counts = tags.map(t => t.articleCount ?? 0);
-        const max = Math.max(...counts, 1);
-        const min = Math.min(...counts, 0);
-        // 字号范围 12px - 26px；归一化到 [0,1] 再映射
-        const sizeFor = (c) => 12 + Math.round((c - min) / Math.max(1, max - min) * 14);
-        // 文章数为 0 的标签置灰；>0 按热度从墨黑到红色过渡
-        const colorFor = (c) => {
-          if (c === 0) return 'var(--gray-a)';
-          if (c >= max * 0.6) return 'var(--red)';
-          return 'var(--ink)';
-        };
+        var counts = tags.map(function (t) { return t.articleCount || 0; });
+        var max = Math.max.apply(null, counts.concat([1]));
+        var min = Math.min.apply(null, counts.concat([0]));
+        // 字体大小：文章越多越大，同时加少量随机偏移，让每个标签都独一无二
+        function sizeFor(c) { return 12 + Math.round((c - min) / Math.max(1, max - min) * 16) + Math.round(Math.random() * 4 - 2); }
 
-        wrap.innerHTML = tags.map(t => {
-          const c = t.articleCount ?? 0;
-          const size = sizeFor(c);
-          return `<a class="tag-item" href="articles.html?tag=${encodeURIComponent(t.name)}"
-        style="font-size:${size}px;color:${colorFor(c)};font-weight:${c >= max * 0.4 ? 700 : 500};">
-        # ${esc(t.name)} <span class="n">${c}</span>
-      </a>`;
+        wrap.innerHTML = tags.map(function (t, i) {
+          var c = t.articleCount || 0;
+          var size = sizeFor(c);
+          var col = getTagColor(i);
+          return '<span class="tag-item tag-clickable" data-tag="' + esc(t.name) +
+            '" style="font-size:' + size + 'px;--tag-bg:' + col.bg + ';--tag-border:' + col.border + ';--tag-text:' + col.text + ';">' +
+            esc(t.name) + ' <span class="n" style="font-family:var(--mono);font-size:' + Math.max(10, size - 3) + 'px;">' + c + '</span></span>';
         }).join('');
+
+        // 给每个标签绑定点击事件
+        var items = wrap.querySelectorAll('.tag-clickable');
+        console.log('[tags] 绑定了 ' + items.length + ' 个标签点击事件');
+        items.forEach(function (el) {
+          el.addEventListener('click', function () {
+            var name = el.dataset.tag;
+            var idx = selectedTags.indexOf(name);
+            if (idx >= 0) {
+              selectedTags.splice(idx, 1);
+              el.classList.remove('active');
+            } else {
+              selectedTags.push(name);
+              el.classList.add('active');
+            }
+            updateTagUI();
+            filterByTags();
+          });
+        });
       } catch (e) {
-        document.getElementById('tag-loading').innerHTML = '加载失败: ' + esc(e.message);
+        console.error('[tags] 加载失败:', e);
+        loading.innerHTML = '加载失败: ' + esc(e.message || String(e));
       }
     }
+
+    async function filterByTags() {
+      var results = document.getElementById('tag-results');
+      var list = document.getElementById('tag-result-list');
+      var totalEl = document.getElementById('tag-result-total');
+
+      if (selectedTags.length === 0) {
+        results.style.display = 'none';
+        return;
+      }
+
+      results.style.display = '';
+      list.innerHTML = '<div class="loading">加载中…</div>';
+
+      try {
+        var allArticles = [];
+        var seen = new Set();
+        for (var i = 0; i < selectedTags.length; i++) {
+          var tag = selectedTags[i];
+          var data = await api.get('/api/articles?tag=' + encodeURIComponent(tag) + '&pageSize=50&sort=latest');
+          if (data && data.list) {
+            for (var j = 0; j < data.list.length; j++) {
+              var a = data.list[j];
+              if (!seen.has(a.id)) {
+                seen.add(a.id);
+                allArticles.push(a);
+              }
+            }
+          }
+        }
+
+        totalEl.textContent = allArticles.length;
+        console.log('[tags] 筛选结果: ' + allArticles.length + ' 篇');
+
+        if (!allArticles.length) {
+          list.innerHTML = '<div class="empty">暂无匹配文章</div>';
+          return;
+        }
+
+        allArticles.sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
+
+        list.innerHTML = allArticles.map(function (a, i) {
+          return '<a class="entry" href="article.html?id=' + a.id + '">' +
+            '<span class="num">' + String(i + 1).padStart(3, '0') + '</span>' +
+            '<span class="title"><span>' + esc(a.title) + '</span><span class="arrow">→</span></span>' +
+            '<span class="entry-cat">' + esc((a.category && a.category.name) || '未分类') + '</span>' +
+            '<span class="date">' + fmtDate(a.createdAt) + '<span class="views">' + fmtNum(a.viewCount) + ' views</span></span>' +
+            '</a>';
+        }).join('');
+      } catch (e) {
+        console.error('[tags] 筛选失败:', e);
+        list.innerHTML = '<div class="empty">加载失败: ' + esc(e.message || String(e)) + '</div>';
+      }
+    }
+
+    // 页面初始化入口
+    initPage('tags').then(function () {
+      console.log('[tags] initPage 完成，开始加载标签');
+      loadTags();
+    }).catch(function (e) {
+      console.error('[tags] initPage 失败:', e);
+      var loading = document.getElementById('tag-loading');
+      if (loading) loading.innerHTML = '初始化失败: ' + esc(e.message || String(e));
+    });
   </script>
 </body>
 

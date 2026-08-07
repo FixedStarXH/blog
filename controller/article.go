@@ -47,6 +47,7 @@ func (c *ArticleController) GetArticleList(ctx *gin.Context) {
 	keyword := ctx.Query("keyword")
 
 	authorID, _ := strconv.ParseUint(ctx.DefaultQuery("authorId", "0"), 10, 64)
+	categoryID, _ := strconv.ParseUint(ctx.DefaultQuery("categoryId", "0"), 10, 64)
 
 	tag := ctx.Query("tag")
 	sortBy := ctx.Query("sort")
@@ -54,7 +55,7 @@ func (c *ArticleController) GetArticleList(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "10"))
 
-	articles, total, err := c.service.GetPublishedArticles(keyword, uint(authorID), tag, sortBy, page, pageSize)
+	articles, total, err := c.service.GetPublishedArticles(keyword, uint(authorID), tag, uint(categoryID), sortBy, page, pageSize)
 	if err != nil {
 		utils.Error(ctx, "获取文章列表失败")
 		return
