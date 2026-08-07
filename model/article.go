@@ -32,6 +32,9 @@ type Article struct {
 	CategoryID   uint       `gorm:"not null;index;comment:分类ID" json:"categoryId"`        // 分类 FK（必选）
 	ColumnID     *uint      `gorm:"index;comment:专栏ID" json:"columnId"`                   // 专栏 FK；*uint=可空（文章可不属于专栏）
 
+	// 以下字段不落库（gorm:"-"），由 Service 计算后返回给前端
+	NeedPassword bool `gorm:"-" json:"needPassword"` // 私密文章标记：有密码=true
+
 	// 关联对象（查询时用 Preload 预加载，见 dao）
 	Author   User     `gorm:"foreignKey:AuthorID" json:"author"`     // 作者
 	Category Category `gorm:"foreignKey:CategoryID" json:"category"` // 分类

@@ -50,6 +50,7 @@ func Init(r *gin.Engine) {
 		api.PUT("/articles/:id/view", articleCtl.AddView)
 		api.PUT("/articles/:id/like", articleCtl.Like)
 		api.GET("/articles/:id/nav", articleCtl.GetArticleNav)
+		api.POST("/articles/:id/unlock", articleCtl.UnlockArticle) // 私密文章解锁（游客也能试）
 		api.GET("/articles/:id/comments", commentCtl.GetComments)
 		api.POST("/articles/:id/comments", commentCtl.AddComment)
 		api.GET("/archives", articleCtl.GetArchives)

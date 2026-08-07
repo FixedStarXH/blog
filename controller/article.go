@@ -18,6 +18,7 @@ type createArticleRequest struct {
 	Content    string     `json:"content" binding:"required"`
 	Summary    string     `json:"summary"`
 	CoverImage string     `json:"coverImage"`
+	Password   string     `json:"password"`  // 私密文章密码；空=公开
 	PublishAt  *time.Time `json:"publishAt"` // 可空；设未来时间=定时发布，不传=审核通过立即发布
 	CategoryID uint       `json:"categoryId" binding:"required"`
 	TagIDs     []uint     `json:"tagIds"`
@@ -28,6 +29,7 @@ type updateArticleRequest struct {
 	Content    string     `json:"content" binding:"required"`
 	Summary    string     `json:"summary"`
 	CoverImage string     `json:"coverImage"`
+	Password   string     `json:"password"`  // 私密文章密码；空=变回公开
 	PublishAt  *time.Time `json:"publishAt"` // 可空；修改排期时间
 	CategoryID uint       `json:"categoryId" binding:"required"`
 	TagIDs     []uint     `json:"tagIds"`
@@ -108,7 +110,7 @@ func (c *ArticleController) CreateMyArticle(ctx *gin.Context) {
 	}
 	userID := middleware.GetUserID(ctx)
 
-	article, err := c.service.CreateArticle(userID, req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.PublishAt, req.TagIDs)
+	article, err := c.service.CreateArticle(userID, req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.Password, req.PublishAt, req.TagIDs)
 	if err != nil {
 		utils.Fail(ctx, err.Error())
 		return
@@ -157,7 +159,7 @@ func (c *ArticleController) UpdateMyArticle(ctx *gin.Context) {
 	}
 	userID := middleware.GetUserID(ctx)
 
-	if err := c.service.UpdateMyArticle(uint(id), userID, req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.PublishAt, req.TagIDs); err != nil {
+	if err := c.service.UpdateMyArticle(uint(id), userID, req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.Password, req.PublishAt, req.TagIDs); err != nil {
 		if errors.Is(err, dao.ErrNotAuthor) {
 			utils.Forbidden(ctx, "无权修改该文章")
 			return
@@ -326,4 +328,34 @@ func (c *ArticleController) RejectArticle(ctx *gin.Context) {
 		return
 	}
 	utils.Success(ctx, nil)
+}
+
+// 解锁请求体：密码必填
+type unlockArticleRequest struct {
+	Password string `json:"password" binding:"required"`
+}
+
+// UnlockArticle 私密文章解锁（公开接口：游客也能试）
+// POST /api/articles/:id/unlock  Body: {"password":"xxx"}
+func (c *ArticleController) UnlockArticle(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
+	if err != nil {
+		utils.Fail(ctx, "无效的文章ID")
+		return
+	}
+	var req unlockArticleRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		utils.Fail(ctx, "参数错误："+err.Error())
+		return
+	}
+	article, err := c.service.UnlockArticle(uint(id), req.Password)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			utils.Fail(ctx, "文章不存在")
+			return
+		}
+		utils.Fail(ctx, err.Error())
+		return
+	}
+	utils.Success(ctx, article)
 }

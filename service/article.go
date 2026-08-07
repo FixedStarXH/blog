@@ -1,6 +1,7 @@
 package service
 
 import (
+	"crypto/subtle"
 	"errors"
 	"time"
 
@@ -30,11 +31,21 @@ func (s *ArticleService) GetPublishedArticles(keyword string, authorID uint, tag
 
 }
 
+// GetArticleByID 文章详情（公开接口）：私密文章不返回正文，标记 needPassword
 func (s *ArticleService) GetArticleByID(id uint) (*model.Article, error) {
-	return s.dao.FindByID(s.db, id)
+	article, err := s.dao.FindByID(s.db, id)
+	if err != nil {
+		return nil, err
+	}
+	// 私密文章：告诉前端"需要密码"，并隐藏正文（未解锁前不泄露）
+	article.NeedPassword = article.Password != ""
+	if article.NeedPassword {
+		article.Content = ""
+	}
+	return article, nil
 }
 
-func (s *ArticleService) CreateArticle(authorID, categoryID uint, title, content, summary, coverImage string, publishAt *time.Time, tagIDs []uint) (*model.Article, error) {
+func (s *ArticleService) CreateArticle(authorID, categoryID uint, title, content, summary, coverImage, password string, publishAt *time.Time, tagIDs []uint) (*model.Article, error) {
 	tags := make([]model.Tag, 0, len(tagIDs))
 	for _, id := range tagIDs {
 		tags = append(tags, model.Tag{BaseModel: model.BaseModel{ID: id}})
@@ -44,6 +55,7 @@ func (s *ArticleService) CreateArticle(authorID, categoryID uint, title, content
 		Content:    content,
 		Summary:    summary,
 		CoverImage: coverImage,
+		Password:   password,  // 私密文章密码；空=公开
 		PublishAt:  publishAt, // 作者可设定时发布；nil=不排期，审核通过立即发布
 		Status:     model.ArticleStatusPending,
 		AuthorID:   authorID,
@@ -71,13 +83,14 @@ func (s *ArticleService) GetMyArticleDetail(id, authorID uint) (*model.Article, 
 	return s.dao.FindByIDAndAuthor(s.db, id, authorID)
 }
 
-func (s *ArticleService) UpdateMyArticle(id, authorID, categoryID uint, title, content, summary, coverImage string, publishAt *time.Time, tagIDs []uint) error {
+func (s *ArticleService) UpdateMyArticle(id, authorID, categoryID uint, title, content, summary, coverImage, password string, publishAt *time.Time, tagIDs []uint) error {
 	updates := map[string]interface{}{
 		"title":       title,
 		"content":     content,
 		"summary":     summary,
 		"cover_image": coverImage,
 		"category_id": categoryID,
+		"password":    password,  // 修改私密文章密码；空=变回公开
 		"publish_at":  publishAt, // 修改排期时间；nil=不排期
 	}
 	if err := s.dao.Update(s.db, id, authorID, updates); err != nil {
@@ -186,4 +199,25 @@ func (s *ArticleService) RejectArticle(id uint, reason string) error {
 		return err
 	}
 	return s.dao.UpdateStatus(s.db, id, model.ArticleStatusRejected, reason)
+}
+
+// UnlockArticle 私密文章解锁：密码正确返回全文
+// 用 crypto/subtle 恒定时间比较，防时序攻击（响应时间与"错几位"无关）
+func (s *ArticleService) UnlockArticle(id uint, password string) (*model.Article, error) {
+	article, err := s.dao.FindByID(s.db, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("文章不存在")
+		}
+		return nil, err
+	}
+	// 公开文章：直接返回全文（解锁接口对公开文章无害）
+	if article.Password == "" {
+		return article, nil
+	}
+	// 私密文章：恒定时间比较密码
+	if subtle.ConstantTimeCompare([]byte(password), []byte(article.Password)) != 1 {
+		return nil, errors.New("密码错误")
+	}
+	return article, nil
 }
