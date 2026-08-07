@@ -4,6 +4,9 @@ config.yaml
 # 上传的图片
 uploads/
 
+# 运行时日志（slog 输出，7.3 新增）
+logs/
+
 # 本地设计文档（不上传，仅本地使用）
 docs/
 
