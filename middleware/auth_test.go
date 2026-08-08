@@ -10,13 +10,47 @@ import (
 	"blog-system/utils"
 
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
-// setup 测试前初始化：gin 测试模式 + 固定密钥
+// setup 测试前初始化：gin 测试模式 + 固定密钥 + 内存数据库
+//
+// AuthRequired 现在会查库验证用户状态（禁用/删除的用户 token 立即失效），
+// 所以测试必须有一个真实可查的 DB。这里用纯 Go 的 sqlite 内存库：
+// 无需外部 MySQL、无需 CGO 编译，测试自包含。
 func setup() {
 	gin.SetMode(gin.TestMode)
 	config.AppConfig = &config.Config{
 		JWT: config.JWTConfig{Secret: "test-secret"},
+	}
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		panic("初始化测试内存数据库失败: " + err.Error())
+	}
+	if err := db.AutoMigrate(&model.User{}); err != nil {
+		panic("测试建表失败: " + err.Error())
+	}
+	model.DB = db
+
+	// 测试用户（显式指定 ID，对应各用例 GenerateToken 里的用户ID）：
+	//   1 = 普通用户  2 = 编辑  5 = 编辑
+	// 注意 AuthRequired 会用数据库里的 role 覆盖 token 里的旧值，
+	// 所以这里插入的角色必须与用例期望一致。
+	users := []model.User{
+		{Username: "user1", Email: "u1@test.com", Password: "x", Nickname: "普通用户", Role: model.RoleUser, Status: model.UserStatusActive},
+		{Username: "editor", Email: "u2@test.com", Password: "x", Nickname: "编辑", Role: model.RoleEditor, Status: model.UserStatusActive},
+		{Username: "editor5", Email: "u5@test.com", Password: "x", Nickname: "编辑5", Role: model.RoleEditor, Status: model.UserStatusActive},
+	}
+	users[0].ID = 1
+	users[1].ID = 2
+	users[2].ID = 5
+	if err := db.Create(&users).Error; err != nil {
+		panic("插入测试用户失败: " + err.Error())
 	}
 }
 

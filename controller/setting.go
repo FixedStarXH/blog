@@ -69,14 +69,15 @@ func (c *SettingController) GetRandomQuote(ctx *gin.Context) {
 // ------------------------------------------------------------
 
 // updateSettingsRequest 站点设置保存体（与前端表单字段一一对应）
+// 各字段加 max 限制，防止超长文本写入 settings.value（varchar(255)）报错
 type updateSettingsRequest struct {
-	SiteTitle       string              `json:"site_title"`
-	SiteSubtitle    string              `json:"site_subtitle"`
-	SiteDescription string              `json:"site_description"`
-	SiteLogo        string              `json:"site_logo"`
-	SiteBeian       string              `json:"site_beian"`
-	SocialGithub    string              `json:"social_github"`
-	SocialEmail     string              `json:"social_email"`
+	SiteTitle       string              `json:"site_title" binding:"max=255"`
+	SiteSubtitle    string              `json:"site_subtitle" binding:"max=255"`
+	SiteDescription string              `json:"site_description" binding:"max=255"`
+	SiteLogo        string              `json:"site_logo" binding:"max=255"`
+	SiteBeian       string              `json:"site_beian" binding:"max=255"`
+	SocialGithub    string              `json:"social_github" binding:"max=255"`
+	SocialEmail     string              `json:"social_email" binding:"max=255"`
 	Quotes          []service.QuoteItem `json:"quotes"` // 名言池（结构化和前端编辑框来回转换）
 }
 

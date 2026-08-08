@@ -19,10 +19,11 @@ func NewLinkController(service *service.LinkService) *LinkController {
 }
 
 // linkRequest 友链请求体（前端 links.html 契约）
+// 长度与 model.Link 的 size 对齐；url 用 binding:"url" 校验格式（http/https）
 type linkRequest struct {
-	Name        string `json:"name" binding:"required"`
-	URL         string `json:"url" binding:"required"`
-	Description string `json:"description"`
+	Name        string `json:"name" binding:"required,max=50"`
+	URL         string `json:"url" binding:"required,url,max=255"`
+	Description string `json:"description" binding:"max=200"`
 	Sort        int    `json:"sort"`
 	Enabled     bool   `json:"enabled"`
 }

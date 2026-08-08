@@ -81,8 +81,8 @@ func Init(r *gin.Engine) {
 		api.GET("/archive", articleCtl.GetArchives)         // 归档别名（前端用单数）
 
 		// 阶段三：用户体系
-		// 注册/登录不需要登录
-		api.POST("/auth/register", authCtl.Register)
+		// 注册/登录不需要登录；注册限流防批量注册垃圾账号（与登录同级别：5/秒、突发 10）
+		api.POST("/auth/register", middleware.RateLimitByIP(5, 10), authCtl.Register)
 		// 登录接口严格限流（防暴力破解密码：5/秒、突发 10，按 IP 维度）
 		api.POST("/auth/login", middleware.RateLimitByIP(5, 10), authCtl.Login)
 		// 后台登录（前端 admin/login.html 契约；编辑+ 才能进后台，角色校验在 handler 内）

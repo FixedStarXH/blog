@@ -13,26 +13,27 @@ import (
 	"gorm.io/gorm"
 )
 
+// 长度限制与 model.Article 的 size 对齐（后端必须再校验：前端 maxlength 可被直接调 API 绕过）
 type createArticleRequest struct {
-	Title      string     `json:"title" binding:"required"`
-	Content    string     `json:"content" binding:"required"`
-	Summary    string     `json:"summary"`
-	CoverImage string     `json:"coverImage"`
-	SourceURL  string     `json:"sourceUrl"` // 转载来源链接；可空
-	Password   string     `json:"password"`  // 私密文章密码；空=公开
-	PublishAt  *time.Time `json:"publishAt"` // 可空；设未来时间=定时发布，不传=审核通过立即发布
+	Title      string     `json:"title" binding:"required,max=200"`
+	Content    string     `json:"content" binding:"required,max=200000"` // 正文 HTML，放宽上限（200KB）
+	Summary    string     `json:"summary" binding:"max=500"`
+	CoverImage string     `json:"coverImage" binding:"max=255"`
+	SourceURL  string     `json:"sourceUrl" binding:"max=255"` // 转载来源链接；可空
+	Password   string     `json:"password" binding:"max=255"`  // 私密文章密码；空=公开
+	PublishAt  *time.Time `json:"publishAt"`                   // 可空；设未来时间=定时发布，不传=审核通过立即发布
 	CategoryID uint       `json:"categoryId" binding:"required"`
 	TagIDs     []uint     `json:"tagIds"`
 }
 
 type updateArticleRequest struct {
-	Title      string     `json:"title" binding:"required"`
-	Content    string     `json:"content" binding:"required"`
-	Summary    string     `json:"summary"`
-	CoverImage string     `json:"coverImage"`
-	SourceURL  string     `json:"sourceUrl"` // 转载来源链接；可空
-	Password   string     `json:"password"`  // 私密文章密码；空=变回公开
-	PublishAt  *time.Time `json:"publishAt"` // 可空；修改排期时间
+	Title      string     `json:"title" binding:"required,max=200"`
+	Content    string     `json:"content" binding:"required,max=200000"`
+	Summary    string     `json:"summary" binding:"max=500"`
+	CoverImage string     `json:"coverImage" binding:"max=255"`
+	SourceURL  string     `json:"sourceUrl" binding:"max=255"` // 转载来源链接；可空
+	Password   string     `json:"password" binding:"max=255"`  // 私密文章密码；空=变回公开
+	PublishAt  *time.Time `json:"publishAt"`                   // 可空；修改排期时间
 	CategoryID uint       `json:"categoryId" binding:"required"`
 	TagIDs     []uint     `json:"tagIds"`
 }

@@ -7,9 +7,10 @@ package model
 type Category struct {
 	BaseModel
 
-	Name        string `gorm:"unique;not null;size:50;comment:分类名" json:"name"` // 唯一（复合索引 (name,deleted_at) 由 init.go 迁移）
-	Description string `gorm:"size:200;comment:分类描述" json:"description"`        // 可空
-	Sort        int    `gorm:"default:0;comment:排序小在前" json:"sort"`             // 排序值
+	// 不写 gorm:"unique"：理由见 model/user.go 注释（与软删除复合索引冲突，导致 AutoMigrate 启动失败）
+	Name        string `gorm:"not null;size:50;comment:分类名" json:"name"` // 唯一（复合索引 (name,deleted_at) 由 init.go 迁移）
+	Description string `gorm:"size:200;comment:分类描述" json:"description"` // 可空
+	Sort        int    `gorm:"default:0;comment:排序小在前" json:"sort"`      // 排序值
 
 	// 反向关联：该分类下的文章（分类列表接口统计 articleCount 用）
 	// json:"-" 不输出文章列表，避免和 Article.Category 互相嵌套导致 JSON 循环
