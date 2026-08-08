@@ -101,6 +101,7 @@ function showError(msg) {
 
 function renderArticle() {
   const a = article;
+  window.__article = article; // 供 fixBrokenImages 读取原文链接（sourceUrl）
   const wrap = document.getElementById('article-wrap');
 
   // 有密码且未解锁 → 显示锁
@@ -199,11 +200,12 @@ function renderArticle() {
   fixBrokenImages();  // 图片加载失败 → 彩色占位符
 }
 
-// 图片加载失败兜底：CSDN 防盗链导致裂图 → 直接隐藏，并在后方插入 CSDN 原文链接
+// 图片加载失败兜底：CSDN 防盗链导致裂图 → 直接隐藏，并插入跳转链接
+// 优先跳转到该文章的 CSDN 原文地址（article.sourceUrl），无原文时回退当前文章链接
 function fixBrokenImages() {
-  const csdnUser = 'FixedstarXH';
   const imgs = document.querySelectorAll('#article-content img');
   if (!imgs.length) return;
+  const target = (window.__article && window.__article.sourceUrl) || location.href;
   imgs.forEach(img => {
     if (img.dataset.fixed) return;
     img.dataset.fixed = '1';
@@ -212,10 +214,10 @@ function fixBrokenImages() {
       img.dataset.fallback = '1';
       // 隐藏裂图
       img.style.display = 'none';
-      // 在图片后插入一个 CSDN 原文链接提示
+      // 在图片后插入原文链接提示（CSDN 原文地址，而非博客主页）
       const note = document.createElement('div');
       note.className = 'img-fallback';
-      note.innerHTML = '<a href="https://blog.csdn.net/' + csdnUser + '" target="_blank" rel="noopener" style="font-size:12px;color:var(--gray-a);border:1px dashed var(--line);display:inline-block;padding:8px 14px;margin:8px 0;">[图片加载失败] 点击查看 CSDN 原文 →</a>';
+      note.innerHTML = '<a href="' + target + '" target="_blank" rel="noopener" style="font-size:12px;color:var(--gray-a);border:1px dashed var(--line);display:inline-block;padding:8px 14px;margin:8px 0;">[图片加载失败] 查看原文 →</a>';
       img.parentNode.insertBefore(note, img.nextSibling);
     });
     // 立即检查已失败的图

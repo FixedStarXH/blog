@@ -21,6 +21,7 @@ type Article struct {
 	Content      string     `gorm:"type:longtext;not null;comment:正文HTML" json:"content"` // 必填，前端渲染 HTML
 	Summary      string     `gorm:"size:500;comment:摘要" json:"summary"`                   // 列表页显示，可空
 	CoverImage   string     `gorm:"size:255;comment:封面图URL" json:"coverImage"`            // 列表页缩略图，可空
+	SourceURL    string     `gorm:"size:255;comment:原文链接" json:"sourceUrl"`              // 转载来源（如 CSDN 原文地址），可空
 	ViewCount    int        `gorm:"default:0;comment:阅读量" json:"viewCount"`               // 冗余计数（明细在 article_views）
 	LikeCount    int        `gorm:"default:0;comment:点赞数" json:"likeCount"`               // 冗余计数（明细在 article_likes）
 	Status       int        `gorm:"default:0;index;comment:0草稿1发布2待审3驳回" json:"status"`   // 默认 ArticleStatusDraft=0

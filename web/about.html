@@ -7,6 +7,58 @@
   <title>关于 — LUMI</title>
   <meta name="description" content="关于博主,技术栈与联系方式。">
   <link rel="stylesheet" href="css/style.css?v=15">
+  <style>
+    /* 侧边标题区：无黑框，上下墨色粗线 + 混合字体排版 */
+    .side-about {
+      border-top: 3px solid var(--ink);
+      border-bottom: 3px solid var(--ink);
+      padding: 22px 4px 20px;
+      margin-bottom: 28px;
+    }
+
+    .sa-coord {
+      display: block;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .22em;
+      color: var(--red);
+    }
+
+    .sa-title {
+      font-size: 42px;
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: -.03em;
+      text-transform: uppercase;
+      margin: 12px 0 14px;
+      color: var(--ink);
+    }
+
+    .sa-title .outline {
+      -webkit-text-stroke: 2px var(--ink);
+      color: transparent;
+    }
+
+    .sa-sub {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .14em;
+      color: var(--ink);
+    }
+
+    .sa-line {
+      width: 42px;
+      height: 3px;
+      background: var(--red);
+      margin: 16px 0;
+    }
+
+    .sa-quote {
+      font-size: 14px;
+      line-height: 1.8;
+      color: var(--gray-6);
+    }
+  </style>
 </head>
 
 <body>
@@ -62,8 +114,14 @@
       </div>
 
       <aside class="side">
-        <div class="avatar">◎</div>
-        <h2 style="margin-top:24px;">角色权限</h2>
+        <div class="side-about">
+          <span class="sa-coord">01 / ABOUT ME</span>
+          <div class="sa-title">ABOUT<span class="outline">ME.</span></div>
+          <div class="sa-sub">GO · GIN · GORM · REDIS</div>
+          <div class="sa-line"></div>
+          <p class="sa-quote">一个 Go 后端开发者的技术笔记，记录思考、踩坑与成长。</p>
+        </div>
+        <h2>角色权限</h2>
         <ul class="skill-list">
           <li>普通用户 <span class="pct">投稿·评论</span></li>
           <li>编辑 <span class="pct">审核·管理</span></li>
@@ -82,7 +140,7 @@
   <footer class="footer" id="footer"></footer>
 
   <script src="js/api.js?v=9"></script>
-  <script src="js/common.js?v=15"></script>
+  <script src="js/common.js?v=16"></script>
   <script>
     initPage('about').then(async () => {
       try {

@@ -18,6 +18,7 @@ type createArticleRequest struct {
 	Content    string     `json:"content" binding:"required"`
 	Summary    string     `json:"summary"`
 	CoverImage string     `json:"coverImage"`
+	SourceURL  string     `json:"sourceUrl"` // 转载来源链接；可空
 	Password   string     `json:"password"`  // 私密文章密码；空=公开
 	PublishAt  *time.Time `json:"publishAt"` // 可空；设未来时间=定时发布，不传=审核通过立即发布
 	CategoryID uint       `json:"categoryId" binding:"required"`
@@ -29,6 +30,7 @@ type updateArticleRequest struct {
 	Content    string     `json:"content" binding:"required"`
 	Summary    string     `json:"summary"`
 	CoverImage string     `json:"coverImage"`
+	SourceURL  string     `json:"sourceUrl"` // 转载来源链接；可空
 	Password   string     `json:"password"`  // 私密文章密码；空=变回公开
 	PublishAt  *time.Time `json:"publishAt"` // 可空；修改排期时间
 	CategoryID uint       `json:"categoryId" binding:"required"`
@@ -111,7 +113,7 @@ func (c *ArticleController) CreateMyArticle(ctx *gin.Context) {
 	}
 	userID := middleware.GetUserID(ctx)
 
-	article, err := c.service.CreateArticle(userID, req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.Password, req.PublishAt, req.TagIDs)
+	article, err := c.service.CreateArticle(userID, req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.SourceURL, req.Password, req.PublishAt, req.TagIDs)
 	if err != nil {
 		utils.Fail(ctx, err.Error())
 		return
@@ -160,7 +162,7 @@ func (c *ArticleController) UpdateMyArticle(ctx *gin.Context) {
 	}
 	userID := middleware.GetUserID(ctx)
 
-	if err := c.service.UpdateMyArticle(uint(id), userID, req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.Password, req.PublishAt, req.TagIDs); err != nil {
+	if err := c.service.UpdateMyArticle(uint(id), userID, req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.SourceURL, req.Password, req.PublishAt, req.TagIDs); err != nil {
 		if errors.Is(err, dao.ErrNotAuthor) {
 			utils.Forbidden(ctx, "无权修改该文章")
 			return
@@ -373,6 +375,7 @@ type adminArticleRequest struct {
 	Content    string     `json:"content" binding:"required"`
 	Summary    string     `json:"summary"`
 	CoverImage string     `json:"coverImage"`
+	SourceURL  string     `json:"sourceUrl"` // 转载来源链接；可空
 	Status     int        `json:"status"`    // 0草稿 1发布 2待审 3驳回 4已排期
 	IsTop      bool       `json:"isTop"`     // 置顶
 	Password   string     `json:"password"`  // 私密文章密码；空=公开
@@ -405,6 +408,7 @@ func (c *ArticleController) GetAdminArticleDetail(ctx *gin.Context) {
 		"title":      article.Title,
 		"summary":    article.Summary,
 		"coverImage": article.CoverImage,
+		"sourceUrl":  article.SourceURL,
 		"content":    article.Content,
 		"status":     article.Status,
 		"isTop":      article.IsTop,
@@ -426,7 +430,7 @@ func (c *ArticleController) CreateAdminArticle(ctx *gin.Context) {
 		return
 	}
 	userID := middleware.GetUserID(ctx)
-	article, err := c.service.AdminCreateArticle(userID, req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.Password, req.PublishAt, req.Status, req.IsTop, req.TagIDs)
+	article, err := c.service.AdminCreateArticle(userID, req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.SourceURL, req.Password, req.PublishAt, req.Status, req.IsTop, req.TagIDs)
 	if err != nil {
 		utils.Fail(ctx, err.Error())
 		return
@@ -447,7 +451,7 @@ func (c *ArticleController) UpdateAdminArticle(ctx *gin.Context) {
 		utils.Fail(ctx, "参数错误："+err.Error())
 		return
 	}
-	if err := c.service.AdminUpdateArticle(uint(id), req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.Password, req.PublishAt, req.Status, req.IsTop, req.TagIDs); err != nil {
+	if err := c.service.AdminUpdateArticle(uint(id), req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.SourceURL, req.Password, req.PublishAt, req.Status, req.IsTop, req.TagIDs); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			utils.Fail(ctx, "文章不存在")
 			return

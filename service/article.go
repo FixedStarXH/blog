@@ -89,7 +89,7 @@ func (s *ArticleService) GetArticleByID(id uint) (*model.Article, error) {
 	return a, nil
 }
 
-func (s *ArticleService) CreateArticle(authorID, categoryID uint, title, content, summary, coverImage, password string, publishAt *time.Time, tagIDs []uint) (*model.Article, error) {
+func (s *ArticleService) CreateArticle(authorID, categoryID uint, title, content, summary, coverImage, sourceURL, password string, publishAt *time.Time, tagIDs []uint) (*model.Article, error) {
 	tags := make([]model.Tag, 0, len(tagIDs))
 	for _, id := range tagIDs {
 		tags = append(tags, model.Tag{BaseModel: model.BaseModel{ID: id}})
@@ -99,6 +99,7 @@ func (s *ArticleService) CreateArticle(authorID, categoryID uint, title, content
 		Content:    content,
 		Summary:    summary,
 		CoverImage: coverImage,
+		SourceURL:  sourceURL,
 		Password:   password,  // 私密文章密码；空=公开
 		PublishAt:  publishAt, // 作者可设定时发布；nil=不排期，审核通过立即发布
 		Status:     model.ArticleStatusPending,
@@ -129,7 +130,7 @@ func (s *ArticleService) GetMyArticleDetail(id, authorID uint) (*model.Article, 
 	return s.dao.FindByIDAndAuthor(s.db, id, authorID)
 }
 
-func (s *ArticleService) UpdateMyArticle(id, authorID, categoryID uint, title, content, summary, coverImage, password string, publishAt *time.Time, tagIDs []uint) error {
+func (s *ArticleService) UpdateMyArticle(id, authorID, categoryID uint, title, content, summary, coverImage, sourceURL, password string, publishAt *time.Time, tagIDs []uint) error {
 	// 先取当前文章：草稿/已驳回 保存后自动"重新提交审核"（回到待审核）；
 	// 已发布文章编辑后保持原状态（作者直接更新内容）
 	article, err := s.dao.FindByIDAndAuthor(s.db, id, authorID)
@@ -141,6 +142,7 @@ func (s *ArticleService) UpdateMyArticle(id, authorID, categoryID uint, title, c
 		"content":     content,
 		"summary":     summary,
 		"cover_image": coverImage,
+		"source_url":  sourceURL,
 		"category_id": categoryID,
 		"password":    password,  // 修改私密文章密码；空=变回公开
 		"publish_at":  publishAt, // 修改排期时间；nil=不排期
@@ -355,7 +357,7 @@ func (s *ArticleService) GetAdminArticleDetail(id uint) (*model.Article, error) 
 
 // AdminCreateArticle 后台代发/新建文章：状态与置顶由后台直接指定
 // （和作者投稿不同：投稿固定走"待审核"，管理员自己发可以直接发布）
-func (s *ArticleService) AdminCreateArticle(authorID, categoryID uint, title, content, summary, coverImage, password string, publishAt *time.Time, status int, isTop bool, tagIDs []uint) (*model.Article, error) {
+func (s *ArticleService) AdminCreateArticle(authorID, categoryID uint, title, content, summary, coverImage, sourceURL, password string, publishAt *time.Time, status int, isTop bool, tagIDs []uint) (*model.Article, error) {
 	tags := make([]model.Tag, 0, len(tagIDs))
 	for _, id := range tagIDs {
 		tags = append(tags, model.Tag{BaseModel: model.BaseModel{ID: id}})
@@ -365,6 +367,7 @@ func (s *ArticleService) AdminCreateArticle(authorID, categoryID uint, title, co
 		Content:    content,
 		Summary:    summary,
 		CoverImage: coverImage,
+		SourceURL:  sourceURL,
 		Password:   password,
 		PublishAt:  publishAt,
 		Status:     status,
@@ -382,7 +385,7 @@ func (s *ArticleService) AdminCreateArticle(authorID, categoryID uint, title, co
 }
 
 // AdminUpdateArticle 后台编辑任意文章（含置顶/状态）
-func (s *ArticleService) AdminUpdateArticle(id, categoryID uint, title, content, summary, coverImage, password string, publishAt *time.Time, status int, isTop bool, tagIDs []uint) error {
+func (s *ArticleService) AdminUpdateArticle(id, categoryID uint, title, content, summary, coverImage, sourceURL, password string, publishAt *time.Time, status int, isTop bool, tagIDs []uint) error {
 	// 先判存在：GORM 的 Updates 查不到行返回 nil 不报错
 	if _, err := s.dao.FindByID(s.db, id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -396,6 +399,7 @@ func (s *ArticleService) AdminUpdateArticle(id, categoryID uint, title, content,
 		"content":     content,
 		"summary":     summary,
 		"cover_image": coverImage,
+		"source_url":  sourceURL,
 		"category_id": categoryID,
 		"password":    password,
 		"publish_at":  publishAt,

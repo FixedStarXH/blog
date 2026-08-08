@@ -89,7 +89,7 @@ function renderFooter() {
       <div class="copy">© 2026 <b>BLOG-SYSTEM</b> — Built with Go + Gin + Swiss</div>
       <div class="links">
         <a href="about.html">关于</a>
-        <a href="/api/rss.xml" target="_blank">RSS</a>
+        <a href="rss.html">RSS</a>
         <a href="register.html">注册</a>
         <a href="admin/login.html">后台</a>
       </div>

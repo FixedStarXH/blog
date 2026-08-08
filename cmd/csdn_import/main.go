@@ -335,6 +335,7 @@ func importArticle(token string, m articleMeta, title, content string) error {
 		"password":   "",
 		"publishAt":  nil,
 		"tagIds":     []int{},
+		"sourceUrl":  fmt.Sprintf("https://blog.csdn.net/%s/article/details/%s", *csdnUser, m.ID), // CSDN 原文地址（裂图兜底跳转用）
 	}
 	r, err := postJSON(*baseURL+"/api/admin/articles", token, payload)
 	if err != nil {
