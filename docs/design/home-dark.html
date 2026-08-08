@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>孤舟 · Go 开发者博客</title>
+<style>
+/* ============================================================
+   风格 C —— 现代暗色开发者风 (Modern Dark Dev)
+   深色 + 电光蓝强调 + 等宽字体,类似 Vercel / dev.to
+   ============================================================ */
+:root {
+  --bg:        #0B0D12;   /* 页面底色 */
+  --bg-elev:   #12151D;   /* 卡片底色 */
+  --bg-hover:  #171B25;
+  --line:      #1F2430;
+  --text:      #E6E9F0;
+  --text-soft: #98A0B3;
+  --text-faint:#5B6478;
+  --accent:    #4F9CF9;   /* 电光蓝 */
+  --accent-2:  #38E0A8;   /* 辅助强调:荧光绿 */
+  --code-bg:   #0F131B;
+
+  --font-head: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", Consolas, "SFMono-Regular", monospace;
+  --font-body: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 28px; }
+
+::selection { background: var(--accent); color:#fff; }
+
+/* ---- 顶部导航:终端感 ---- */
+.topbar {
+  position: sticky; top:0; z-index:50;
+  background: rgba(11,13,18,.88); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.topbar .wrap {
+  display:flex; align-items:center; justify-content:space-between; height: 60px;
+}
+.brand { display:flex; align-items:center; gap:10px; font-family: var(--font-mono); font-size:15px; }
+.brand .prompt { color: var(--accent-2); font-weight:700; }
+.brand .path { color: var(--text-soft); }
+.brand .cursor { width:8px; height:16px; background: var(--accent); animation: blink 1.1s infinite; }
+@keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+.topnav { display:flex; gap: 6px; }
+.topnav a {
+  font-family: var(--font-mono); font-size:13.5px; color: var(--text-soft);
+  padding: 7px 14px; border-radius: 6px;
+  transition: color .15s ease, background .15s ease;
+}
+.topnav a:hover { color: var(--text); background: var(--bg-hover); }
+.topnav a.active { color: var(--accent); background: rgba(79,156,249,.12); }
+
+/* ---- Hero ---- */
+.hero { padding: 88px 0 60px; }
+.hero .code-line {
+  font-family: var(--font-mono); font-size: 13.5px; color: var(--text-faint);
+  margin-bottom: 24px;
+}
+.hero .code-line .hl { color: var(--accent-2); }
+.hero h1 {
+  font-size: clamp(34px, 5vw, 56px); font-weight: 800; line-height: 1.15;
+  letter-spacing: -.01em;
+}
+.hero h1 .grad {
+  background: linear-gradient(120deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.hero .sub {
+  margin-top: 20px; max-width: 52ch; color: var(--text-soft); font-size: 17px;
+}
+.hero .stats {
+  display:flex; gap: 34px; margin-top: 40px;
+  font-family: var(--font-mono);
+}
+.hero .stats .stat .num { font-size: 26px; font-weight:700; color: var(--accent); }
+.hero .stats .stat .lbl { font-size: 12px; color: var(--text-faint); text-transform: uppercase; letter-spacing:.08em; }
+
+/* ---- 分类 chips ---- */
+.chips {
+  display:flex; flex-wrap:wrap; gap: 10px;
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  padding: 18px 0; margin-bottom: 46px;
+}
+.chip {
+  font-family: var(--font-mono); font-size: 13px; color: var(--text-soft);
+  border:1px solid var(--line); padding: 7px 14px; border-radius: 999px;
+  transition: all .15s ease;
+}
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.chip .n { color: var(--text-faint); margin-right: 6px; }
+
+/* ---- 文章网格 ---- */
+.section-head {
+  display:flex; align-items:center; justify-content:space-between; margin-bottom: 22px;
+}
+.section-head h2 { font-size: 18px; font-weight:700; }
+.section-head .count { font-family: var(--font-mono); font-size:13px; color: var(--text-faint); }
+
+.grid { display:grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+@media (max-width: 900px) { .grid { grid-template-columns: repeat(2,1fr);} }
+@media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+
+.card {
+  background: var(--bg-elev);
+  border: 1px solid var(--line); border-radius: 12px;
+  padding: 22px;
+  display:flex; flex-direction:column;
+  transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;
+}
+.card:hover {
+  border-color: var(--accent);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 32px -8px rgba(79,156,249,.28);
+}
+.card .tag {
+  font-family: var(--font-mono); font-size:12px;
+  color: var(--accent-2); margin-bottom: 14px;
+  display:flex; align-items:center; gap:8px;
+}
+.card .tag::before { content:"▸"; }
+.card h3 { font-size: 18px; font-weight:700; line-height:1.45; margin-bottom: 10px; }
+.card .excerpt { font-size: 14.5px; color: var(--text-soft); line-height:1.7; flex:1; }
+.card .meta {
+  margin-top: 18px; padding-top: 16px; border-top:1px solid var(--line);
+  display:flex; justify-content:space-between; align-items:center;
+  font-family: var(--font-mono); font-size:12px; color: var(--text-faint);
+}
+.card .meta .views { color: var(--text-soft); }
+
+/* ---- 加载更多 ---- */
+.more-wrap { text-align:center; padding: 52px 0 20px; }
+.more {
+  font-family: var(--font-mono); font-size:14px;
+  background: transparent; color: var(--text);
+  border:1px solid var(--line); padding: 13px 40px; border-radius: 8px;
+  cursor:pointer; transition: all .15s ease;
+}
+.more:hover { border-color: var(--accent); color: var(--accent); background: rgba(79,156,249,.08); }
+
+/* ---- 页脚 ---- */
+.footer { border-top: 1px solid var(--line); margin-top: 64px; padding: 34px 0; }
+.footer .wrap {
+  display:flex; align-items:center; justify-content:space-between;
+  font-family: var(--font-mono); font-size: 12.5px; color: var(--text-faint);
+}
+.footer a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <a class="brand" href="#">
+      <span class="prompt">$</span><span class="path">~/guzhou/blog</span><span class="cursor"></span>
+    </a>
+    <nav class="topnav">
+      <a href="#" class="active">home</a>
+      <a href="#">archive</a>
+      <a href="#">topics</a>
+      <a href="#">about</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <div class="code-line"><span class="hl">#</span> go run ./blog &nbsp;// 每天更一点,坚持七年</div>
+    <h1>孤舟的<span class="grad">技术博客</span></h1>
+    <p class="sub">一个 Go 开发者关于后端、数据库与工具链的实践记录。代码会说话,我负责把踩过的坑写清楚。</p>
+    <div class="stats">
+      <div class="stat"><div class="num">86</div><div class="lbl">Articles</div></div>
+      <div class="stat"><div class="num">12.4k</div><div class="lbl">Views</div></div>
+      <div class="stat"><div class="num">7y</div><div class="lbl">Writing</div></div>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+  <nav class="chips">
+    <a class="chip" href="#"><span class="n">01</span>go-backend</a>
+    <a class="chip" href="#"><span class="n">02</span>database</a>
+    <a class="chip" href="#"><span class="n">03</span>frontend</a>
+    <a class="chip" href="#"><span class="n">04</span>notes</a>
+    <a class="chip" href="#"><span class="n">05</span>toolchain</a>
+  </nav>
+
+  <main>
+    <div class="section-head">
+      <h2>最新文章</h2><span class="count">// total: 86</span>
+    </div>
+
+    <div class="grid">
+      <article class="card">
+        <div class="tag">go / beginner</div>
+        <h3>Go 语言入门指南:语法与并发初探</h3>
+        <p class="excerpt">从变量、控制流到 goroutine 与 channel,用最短篇幅建立心智模型。</p>
+        <div class="meta"><span>2026-07-28</span><span class="views">328 views</span></div>
+      </article>
+
+      <article class="card">
+        <div class="tag">mysql / perf</div>
+        <h3>MySQL 索引优化:从原理到 EXPLAIN 实战</h3>
+        <p class="excerpt">B+ 树怎么存数据?为什么建了索引却不走?逐字段拆解六大失效场景。</p>
+        <div class="meta"><span>2026-07-24</span><span class="views">512 views</span></div>
+      </article>
+
+      <article class="card">
+        <div class="tag">css / layout</div>
+        <h3>用纯 CSS 复刻杂志编辑风页面</h3>
+        <p class="excerpt">不靠框架,只靠 Grid、clamp() 与硬阴影,做出有质感的编辑排版。</p>
+        <div class="meta"><span>2026-07-20</span><span class="views">201 views</span></div>
+      </article>
+
+      <article class="card">
+        <div class="tag">gorm / orm</div>
+        <h3>GORM 入门教程:模型、迁移与关联</h3>
+        <p class="excerpt">AutoMigrate 自动建表,Preload 预加载关联,一次讲透最常用能力。</p>
+        <div class="meta"><span>2026-07-15</span><span class="views">447 views</span></div>
+      </article>
+
+      <article class="card">
+        <div class="tag">gin / middleware</div>
+        <h3>Gin 中间件实战:日志、恢复与鉴权</h3>
+        <p class="excerpt">40 行代码讲清楚中间件执行顺序与 Next() 的语义。</p>
+        <div class="meta"><span>2026-07-10</span><span class="views">172 views</span></div>
+      </article>
+
+      <article class="card">
+        <div class="tag">notes / life</div>
+        <h3>2026 年中复盘:我为什么坚持写博客</h3>
+        <p class="excerpt">技术会过时,但记录本身是复利。写作如何反向塑造学习方式。</p>
+        <div class="meta"><span>2026-07-02</span><span class="views">96 views</span></div>
+      </article>
+    </div>
+
+    <div class="more-wrap"><button class="more">$ load-more --page 2</button></div>
+  </main>
+</div>
+
+<footer class="footer">
+  <div class="wrap">
+    <span>© 2026 guzhou · built with Go + Gin</span>
+    <div><a href="#">rss.xml</a> &nbsp;·&nbsp; <a href="#">github.com/guzhou</a></div>
+  </div>
+</footer>
+
+</body>
+</html>
