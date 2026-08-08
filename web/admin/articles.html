@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>文章管理 — 后台</title>
-  <link rel="stylesheet" href="../css/admin.css?v=11">
+  <link rel="stylesheet" href="../css/admin.css?v=13">
 </head>
 
 <body>
@@ -96,7 +96,10 @@
             </select>
           </div>
           <div class="field full">
-            <label>摘要</label>
+            <label>摘要
+              <button type="button" class="btn ai-btn" id="btn-ai-summary" onclick="aiSummary(event)"
+                title="AI 根据正文自动生成摘要(50-100字)">AI 摘要</button>
+            </label>
             <input type="text" id="a-summary" maxlength="500" placeholder="文章摘要(列表展示)">
           </div>
           <div class="field full">
@@ -104,7 +107,10 @@
             <input type="text" id="a-coverImage" placeholder="/uploads/2026/08/01/xxx.jpg">
           </div>
           <div class="field full">
-            <label>正文内容(HTML)</label>
+            <label>正文内容(HTML)
+              <button type="button" class="btn ai-btn" id="btn-ai-polish" onclick="aiPolish(event)"
+                title="AI 润色正文(错别字/语病/表达),流式输出">AI 润色</button>
+            </label>
             <textarea id="a-content" required placeholder="<p>支持 HTML,代码块用 &lt;pre&gt;&lt;code&gt;</p>"></textarea>
           </div>
           <div class="field">
@@ -132,7 +138,7 @@
     </div>
   </div>
 
-  <script src="../js/api.js?v=8"></script>
+  <script src="../js/api.js?v=9"></script>
   <script src="../js/admin-common.js?v=11"></script>
   <script>
     initAdmin('articles');
@@ -300,6 +306,37 @@
         closeForm();
         reload();
       } catch (err) { toast(err.message, true); }
+    }
+
+    // AI 生成摘要：从库取正文 → 后端调大模型 → 回填摘要框（是否采用由编辑决定）
+    async function aiSummary(ev) {
+      const id = document.getElementById('a-id').value;
+      if (!id) { toast('请先保存文章，再生成摘要', true); return; }
+      const btn = ev.currentTarget;
+      const old = btn.textContent;
+      btn.disabled = true; btn.textContent = '生成中…';
+      try {
+        const data = await api.post('/api/admin/ai/summary', { articleId: parseInt(id) });
+        document.getElementById('a-summary').value = data.summary || '';
+        toast('AI 摘要已生成，可手动修改');
+      } catch (e) { toast(e.message, true); }
+      finally { btn.disabled = false; btn.textContent = old; }
+    }
+
+    // AI 润色：正文发给后端，流式替换编辑器内容（打字机效果）
+    async function aiPolish(ev) {
+      const ta = document.getElementById('a-content');
+      const content = ta.value.trim();
+      if (!content) { toast('正文为空，请先填写内容', true); return; }
+      const btn = ev.currentTarget;
+      const old = btn.textContent;
+      btn.disabled = true; btn.textContent = '润色中…';
+      const orig = ta.value; // 备份，失败可恢复
+      ta.value = '';
+      try {
+        await streamRequest('/api/admin/ai/polish', { content }, d => { ta.value += d; }, () => toast('润色完成，检查后保存'));
+      } catch (e) { ta.value = orig; toast(e.message, true); }
+      finally { btn.disabled = false; btn.textContent = old; }
     }
 
     async function toggleTop(id) {

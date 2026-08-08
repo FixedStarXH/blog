@@ -39,10 +39,441 @@
 
   <footer class="footer" id="footer"></footer>
 
-  <script src="js/api.js?v=11"></script>
+  <script src="js/api.js?v=12"></script>
   <script src="js/common.js?v=19"></script>
   <script type="module" src="./src/main-public.jsx"></script>
-  <script src="js/article.js?v=16"></script>
+  <script src="js/article.js?v=17"></script>
+
+  <!-- ===================== AI 问答悬浮框（Swiss：硬边框/红黑/大写标签/硬阴影） ===================== -->
+  <style>
+    /* 悬浮入口：方形红块 + 硬阴影 + 扫光，hover 位移上浮变墨黑 */
+    /* 注意：bottom:146px 需高于浮动导航组(返回/回顶, 桌面占 bottom 28~124px)，避免重叠 */
+    #ai-chat-btn {
+      position: fixed;
+      right: 20px;
+      bottom: 146px;
+      z-index: 9999;
+      width: 54px;
+      height: 54px;
+      border: 2px solid var(--ink, #1A1915);
+      background: var(--red, #E53012);
+      color: #fff;
+      font-family: var(--mono, "JetBrains Mono", Consolas, monospace);
+      font-size: 19px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 5px 5px 0 var(--ink, #1A1915);
+      transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+      overflow: hidden;
+    }
+
+    #ai-chat-btn:hover {
+      transform: translate(-2px, -2px);
+      box-shadow: 7px 7px 0 var(--ink, #1A1915);
+      background: var(--ink, #1A1915);
+    }
+
+    #ai-chat-btn:active {
+      transform: translate(1px, 1px);
+      box-shadow: 2px 2px 0 var(--ink);
+    }
+
+    #ai-chat-btn::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -80%;
+      width: 50%;
+      height: 100%;
+      transform: skewX(-20deg);
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .45), transparent);
+      transition: left .5s ease;
+    }
+
+    #ai-chat-btn:hover::after {
+      left: 120%;
+    }
+
+    /* 面板：纸色卡片，2px 硬边 + 硬阴影，与站点整体排版一致 */
+    /* 面板定位在 AI 键正上方（按钮顶 200px，留 12px 间距） */
+    #ai-chat-panel {
+      position: fixed;
+      right: 20px;
+      bottom: 212px;
+      z-index: 9999;
+      width: 364px;
+      max-width: calc(100vw - 40px);
+      background: var(--paper, #F6F4F0);
+      border: 2px solid var(--ink, #1A1915);
+      box-shadow: 8px 8px 0 var(--ink, #1A1915);
+      display: none;
+      flex-direction: column;
+    }
+
+    /* 头部：墨黑条带，大写等宽标题 + 红色强调字 + 作用域标签 */
+    .ai-chat-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--ink, #1A1915);
+      color: var(--paper, #F6F4F0);
+      padding: 12px 14px;
+    }
+
+    .ai-chat-title {
+      font-family: var(--mono, "JetBrains Mono", Consolas, monospace);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .22em;
+      text-transform: uppercase;
+    }
+
+    .ai-chat-title b {
+      color: var(--red, #E53012);
+    }
+
+    .ai-chat-scope {
+      font-family: var(--mono, Consolas, monospace);
+      font-size: 10px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--gray-a, #A9A49B);
+      padding: 3px 8px;
+      border: 1px solid var(--gray-a, #A9A49B);
+    }
+
+    .ai-chat-close {
+      cursor: pointer;
+      color: var(--gray-a, #A9A49B);
+      font-size: 16px;
+      line-height: 1;
+      padding: 0 2px;
+      transition: color .15s ease;
+    }
+
+    .ai-chat-close:hover {
+      color: var(--red, #E53012);
+    }
+
+    /* 消息区 */
+    .ai-chat-body {
+      height: 280px;
+      overflow-y: auto;
+      padding: 16px 14px;
+      font-size: 13px;
+      line-height: 1.75;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      scrollbar-width: thin;
+    }
+
+    .ai-msg {
+      max-width: 92%;
+      padding: 10px 14px;
+      word-break: break-word;
+      white-space: pre-wrap;
+      font-size: 13px;
+      animation: ai-msg-in .22s ease;
+    }
+
+    @keyframes ai-msg-in {
+      from {
+        opacity: 0;
+        transform: translateY(4px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* 用户：墨黑底右对齐；AI：白底左对齐带硬阴影（与 .feature 卡片呼应） */
+    .ai-msg.q {
+      align-self: flex-end;
+      background: var(--ink, #1A1915);
+      color: var(--paper, #F6F4F0);
+    }
+
+    .ai-msg.a {
+      align-self: flex-start;
+      background: var(--white, #fff);
+      color: var(--ink, #1A1915);
+      border: 1px solid var(--ink, #1A1915);
+      box-shadow: 3px 3px 0 var(--line, #DDD8CE);
+    }
+
+    .ai-msg.err {
+      align-self: flex-start;
+      background: var(--red-bg, #FBE9E3);
+      color: var(--red, #E53012);
+      border: 1px solid var(--red, #E53012);
+    }
+
+    /* 思考指示：三个红色方块闪烁（模拟打字） */
+    .ai-thinking {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      align-self: flex-start;
+      padding: 12px 14px;
+      border: 1px solid var(--line, #DDD8CE);
+      background: var(--white, #fff);
+    }
+
+    .ai-thinking i {
+      width: 8px;
+      height: 8px;
+      background: var(--red, #E53012);
+      animation: ai-blink 1.2s infinite;
+    }
+
+    .ai-thinking i:nth-child(2) {
+      animation-delay: .2s;
+    }
+
+    .ai-thinking i:nth-child(3) {
+      animation-delay: .4s;
+    }
+
+    @keyframes ai-blink {
+
+      0%,
+      100% {
+        opacity: .15;
+      }
+
+      50% {
+        opacity: 1;
+      }
+    }
+
+    /* 输入区：无边框输入 + 墨黑发送钮（大写等宽），hover 变红 */
+    #ai-chat-form {
+      display: flex;
+      border-top: 2px solid var(--ink, #1A1915);
+    }
+
+    #ai-chat-input {
+      flex: 1;
+      border: none;
+      outline: none;
+      background: var(--paper, #F6F4F0);
+      color: var(--ink, #1A1915);
+      padding: 12px 14px;
+      font-size: 13px;
+      font-family: var(--sans, sans-serif);
+    }
+
+    #ai-chat-input::placeholder {
+      color: var(--gray-a, #A9A49B);
+    }
+
+    #ai-chat-form button {
+      border: none;
+      background: var(--ink, #1A1915);
+      color: var(--paper, #F6F4F0);
+      padding: 0 22px;
+      cursor: pointer;
+      font-family: var(--mono, Consolas, monospace);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      transition: background .18s ease;
+    }
+
+    #ai-chat-form button:hover:not(:disabled) {
+      background: var(--red, #E53012);
+    }
+
+    #ai-chat-form button:disabled {
+      opacity: .45;
+      cursor: not-allowed;
+    }
+
+    /* ===================== 侧边栏"一键总结本文"（标签墙风格，与 AI 按钮一致） ===================== */
+    .ai-summary-card {
+      margin-bottom: 26px;
+    }
+
+    .ai-summary-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      border: 2px solid var(--ink, #1A1915);
+      border-radius: 8px;
+      background: var(--white, #fff);
+      color: var(--ink, #1A1915);
+      font-family: var(--mono, "JetBrains Mono", Consolas, monospace);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      padding: 10px 16px;
+      cursor: pointer;
+      transition: transform .18s ease, box-shadow .2s ease, background .18s ease, color .18s ease;
+    }
+
+    .ai-summary-btn:hover:not(:disabled) {
+      transform: translateY(-3px) rotate(-2deg) scale(1.03);
+      box-shadow: 4px 4px 0 var(--ink, #1A1915);
+      background: var(--yellow, #FFE066);
+      color: var(--ink, #1A1915);
+    }
+
+    .ai-summary-btn:active:not(:disabled) {
+      transform: translateY(-1px) rotate(0deg) scale(1);
+      box-shadow: none;
+    }
+
+    .ai-summary-btn:disabled {
+      opacity: .6;
+      cursor: not-allowed;
+    }
+
+    /* 按钮内思考指示：三个红色方块闪烁（复用 ai-blink） */
+    .ai-summary-thinking {
+      display: inline-flex;
+      gap: 5px;
+      align-items: center;
+    }
+
+    .ai-summary-thinking i {
+      width: 8px;
+      height: 8px;
+      background: var(--red, #E53012);
+      animation: ai-blink 1.2s infinite;
+    }
+
+    .ai-summary-thinking i:nth-child(2) {
+      animation-delay: .2s;
+    }
+
+    .ai-summary-thinking i:nth-child(3) {
+      animation-delay: .4s;
+    }
+
+    /* 摘要结果卡片：白底硬边框硬阴影；内容再长也不撑爆页面——限高滚动查看 */
+    .ai-summary-body {
+      margin-top: 12px;
+      padding: 14px;
+      border: 2px solid var(--ink, #1A1915);
+      background: var(--white, #fff);
+      box-shadow: 4px 4px 0 var(--ink, #1A1915);
+      font-size: 13px;
+      line-height: 1.8;
+      white-space: pre-wrap;
+      word-break: break-word;
+      animation: ai-msg-in .25s ease;
+      max-height: 320px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+    }
+
+    .ai-summary-body.err {
+      border-color: var(--red, #E53012);
+      color: var(--red, #E53012);
+      background: var(--red-bg, #FBE9E3);
+      box-shadow: 4px 4px 0 var(--red, #E53012);
+      max-height: none;
+      overflow: visible;
+    }
+  </style>
+
+  <button id="ai-chat-btn" title="AI 问文章">AI</button>
+  <div id="ai-chat-panel" style="display:none">
+    <div class="ai-chat-head">
+      <span class="ai-chat-title">ASK <b>AI</b></span>
+      <span class="ai-chat-scope" id="ai-chat-scope"></span>
+      <span class="ai-chat-close" id="ai-chat-close" title="关闭">✕</span>
+    </div>
+    <div class="ai-chat-body" id="ai-chat-body"></div>
+    <form id="ai-chat-form">
+      <input id="ai-chat-input" placeholder="输入问题…" maxlength="200">
+      <button type="submit" id="ai-chat-send">问</button>
+    </form>
+  </div>
+
+  <script>
+    (function () {
+      const btn = document.getElementById('ai-chat-btn');
+      const closeBtn = document.getElementById('ai-chat-close');
+      const panel = document.getElementById('ai-chat-panel');
+      const body = document.getElementById('ai-chat-body');
+      const form = document.getElementById('ai-chat-form');
+      const input = document.getElementById('ai-chat-input');
+      const sendBtn = document.getElementById('ai-chat-send');
+
+      // 当前文章 ID：详情页里问"这篇文章"，其他场景问全站
+      const articleId = new URLSearchParams(location.search).get('id');
+      document.getElementById('ai-chat-scope').textContent =
+        articleId ? '本文' : '全站';
+
+      const toggle = (show) => {
+        panel.style.display = show ? 'flex' : 'none';
+        if (show) {
+          input.focus();
+          if (!greeted) { greeted = true; welcome(); }
+        }
+      };
+      let greeted = false;
+      function welcome() {
+        const m = articleId
+          ? '你好，我是这篇《' + (document.title.replace(/\s*[-|]\s*.*$/, '') || '文章') + '》的 AI 助手，可以基于本文内容回答你的问题。'
+          : '你好，我是本站的 AI 助手，可以基于站内文章回答你的问题。';
+        body.appendChild(el('div', 'ai-msg a', m));
+      }
+
+      btn.onclick = () => toggle(panel.style.display === 'none');
+      closeBtn.onclick = () => toggle(false);
+
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const q = input.value.trim();
+        if (!q || sendBtn.disabled) return;
+
+        // 用户问题 + 思考指示器（三格闪烁方块）
+        body.appendChild(el('div', 'ai-msg q', q));
+        const th = document.createElement('div');
+        th.className = 'ai-thinking';
+        th.innerHTML = '<i></i><i></i><i></i>';
+        body.appendChild(th);
+        body.scrollTop = body.scrollHeight;
+
+        input.value = '';
+        sendBtn.disabled = true;
+        let text = '';
+        let ans = null;
+        const append = (d) => {
+          if (!ans) { th.remove(); ans = el('div', 'ai-msg a', ''); body.appendChild(ans); }
+          text += d; ans.textContent = text;
+          body.scrollTop = body.scrollHeight;
+        };
+        try {
+          await streamRequest('/api/ai/ask', { question: q, articleId: articleId ? parseInt(articleId) : null },
+            append,
+            () => { if (ans && !text) ans.textContent = '（无回答）'; });
+        } catch (err) {
+          th.remove();
+          body.appendChild(el('div', 'ai-msg err', '⚠ ' + err.message));
+        } finally {
+          sendBtn.disabled = false;
+          input.focus();
+        }
+      };
+
+      // 简化 DOM 构建
+      function el(tag, cls, txt) {
+        const n = document.createElement(tag);
+        if (cls) n.className = cls;
+        if (txt !== undefined) n.textContent = txt;
+        return n;
+      }
+    })();
+  </script>
 </body>
 
 </html>

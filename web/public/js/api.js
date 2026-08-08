@@ -104,6 +104,73 @@ const api = {
 // 挂到 window：React 组件(ESM)与页面内联脚本均通过 window.api 访问
 window.api = api;
 
+/* ---------- SSE 流式请求（AI 润色 / AI 问答 打字机效果） ----------
+   后端统一输出：data: {"delta":"文字"} … data: [DONE]
+   本函数负责：带 token 的 POST → 读流逐行解析 → onDelta 增量回调 → onDone 完成回调
+   401 处理与 request() 一致：自动刷新 token 重放一次 */
+async function streamRequest(url, data, onDelta, onDone) {
+  const doStream = async (retried) => {
+    const token = localStorage.getItem('accessToken');
+    const opts = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    };
+    if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+
+    let res;
+    try {
+      res = await fetch(url, opts);
+    } catch (e) {
+      throw new Error('网络请求失败，请检查网络或稍后再试');
+    }
+
+    // 401：先刷新重放一次，再失败就清凭证
+    if (res.status === 401 && !retried) {
+      const ok = await tryRefresh();
+      if (ok) return doStream(true);
+      clearAuth();
+      throw new Error('登录已过期，请重新登录');
+    }
+
+    // 非流式响应 = 业务错误（如"AI 未配置"），读出 message
+    if (!res.ok || !(res.headers.get('content-type') || '').includes('text/event-stream')) {
+      let msg = '请求失败';
+      try { const j = await res.json(); msg = j.message || msg; } catch (e) { /* 忽略 */ }
+      throw new Error(msg);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    const finish = () => { onDone && onDone(); };
+    while (true) {
+      let chunk;
+      try {
+        chunk = await reader.read();
+      } catch (e) {
+        throw new Error('连接中断');
+      }
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (!line.startsWith('data:')) continue;
+        const payload = line.slice(5).trim();
+        if (payload === '[DONE]') { finish(); return; }
+        try {
+          const j = JSON.parse(payload);
+          if (j.delta) onDelta(j.delta);
+        } catch (e) { /* 非 JSON 行忽略 */ }
+      }
+    }
+    finish();
+  };
+  return doStream(false);
+}
+
 /* ---------- 格式化工具 ---------- */
 function fmtDate(iso) {
   if (!iso) return '—';

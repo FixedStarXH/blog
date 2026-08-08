@@ -173,6 +173,10 @@ function renderArticle() {
     </div>
 
     <aside class="article-side" id="toc-wrap">
+      <div class="ai-summary-card">
+        <button type="button" class="ai-summary-btn" id="ai-summary-btn" onclick="generateSummary()">✦ 一键总结本文</button>
+        <div class="ai-summary-body" id="ai-summary-body" style="display:none"></div>
+      </div>
       <nav class="toc" id="toc"></nav>
     </aside>
 
@@ -393,6 +397,32 @@ function pulse(el, cls) {
   el.classList.remove(cls);
   void el.offsetWidth;
   el.classList.add(cls);
+}
+
+// 一键总结本文：调公开接口生成 AI 摘要并展示在侧边栏
+// 无 API key 时后端自动降级（截取正文前 120 字），功能不挂
+async function generateSummary() {
+  const btn = document.getElementById('ai-summary-btn');
+  const body = document.getElementById('ai-summary-body');
+  if (!btn || !body || btn.disabled) return;
+
+  btn.disabled = true;
+  const old = btn.innerHTML;
+  // 思考指示：三个红色方块闪烁（复用文章页 ai-blink 动画）
+  btn.innerHTML = '<span class="ai-summary-thinking"><i></i><i></i><i></i></span>';
+  body.style.display = 'block';
+  body.className = 'ai-summary-body';
+  body.textContent = '';
+  try {
+    const data = await api.post('/api/articles/' + id + '/summary');
+    body.textContent = data.summary || '（没有生成到内容，请稍后重试）';
+  } catch (e) {
+    body.className = 'ai-summary-body err';
+    body.textContent = '⚠ ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = old;
+  }
 }
 
 // 分享文章：优先用 Web Share API（移动端原生分享），回退到复制链接

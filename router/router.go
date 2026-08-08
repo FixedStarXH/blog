@@ -52,6 +52,8 @@ func Init(r *gin.Engine) {
 	linkCtl := controller.NewLinkController(linkSvc)
 	dashboardCtl := controller.NewDashboardController(dashboardSvc)
 	rssCtl := controller.NewRSSController(articleSvc, settingSvc)
+	aiSvc := service.NewAIService(model.DB)
+	aiCtl := controller.NewAIController(aiSvc)
 
 	api := r.Group("/api")
 	{
@@ -79,6 +81,10 @@ func Init(r *gin.Engine) {
 		api.GET("/site", settingCtl.GetSiteInfo)            // 前台站点信息（含统计数字）
 		api.GET("/quote/random", settingCtl.GetRandomQuote) // 前台每日一言（结构化 {content, author}）
 		api.GET("/archive", articleCtl.GetArchives)         // 归档别名（前端用单数）
+		// AI 智能问答（公开接口；严格限流：AI 每次调用都花钱，防刷接口烧额度）
+		api.POST("/ai/ask", middleware.RateLimitByIP(5, 10), aiCtl.Ask)
+		// 前台文章"一键总结本文"（公开接口；同样严格限流，未配置 key 时后端自动降级）
+		api.POST("/articles/:id/summary", middleware.RateLimitByIP(5, 10), aiCtl.SummarizeArticle)
 
 		// 阶段三：用户体系
 		// 注册/登录不需要登录；注册限流防批量注册垃圾账号（与登录同级别：5/秒、突发 10）
@@ -97,6 +103,9 @@ func Init(r *gin.Engine) {
 		authed.GET("/auth/me", authCtl.Me)
 		authed.PUT("/auth/me", authCtl.UpdateProfile)
 		authed.PUT("/auth/password", authCtl.ChangePassword)
+		// AI 能力（登录用户）：投稿/写文章页生成摘要、流式润色（严格限流，AI 每次调用都花钱）
+		authed.POST("/ai/summary", middleware.RateLimitByIP(5, 10), aiCtl.GenerateSummaryByContent)
+		authed.POST("/ai/polish", middleware.RateLimitByIP(5, 10), aiCtl.Polish)
 		// 阶段四：我的投稿
 		authed.GET("/my/articles", articleCtl.GetMyArticles)
 		authed.POST("/my/articles", articleCtl.CreateMyArticle)
@@ -156,6 +165,12 @@ func Init(r *gin.Engine) {
 		admin.DELETE("/comments/:id", commentCtl.DeleteComment)
 		admin.PUT("/comments/:id/status", commentCtl.UpdateCommentStatus)
 		admin.POST("/comments/batch", commentCtl.BatchCommentOp)
+		// AI 能力（编辑+）：摘要 / 润色 / RAG 索引管理
+		admin.POST("/ai/summary", aiCtl.GenerateSummary)
+		admin.POST("/ai/polish", aiCtl.Polish)
+		admin.POST("/ai/index/:id", aiCtl.IndexArticle)
+		admin.POST("/ai/index-all", aiCtl.IndexAll)
+		admin.GET("/ai/index-status", aiCtl.IndexStatus)
 	}
 
 	// 前端构建产物托管(dist/ 目录，由 web/ Vite 工程构建生成，源文件在 web/)

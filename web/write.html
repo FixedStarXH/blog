@@ -181,6 +181,46 @@
     .write-actions .cancel:hover {
       color: var(--red);
     }
+
+    /* AI 功能按钮：标签墙风格（曲线角/2px描边/hover旋转缩放黄底），与后台 AI 按钮一致 */
+    .write-ai-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: 8px;
+      padding: 4px 12px;
+      border: 2px solid var(--ink);
+      border-radius: 8px;
+      background: var(--white);
+      color: var(--ink);
+      font-family: var(--mono, Consolas, monospace);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      vertical-align: middle;
+      transition: transform .18s ease, box-shadow .2s ease, background .18s ease, color .18s ease;
+    }
+
+    .write-ai-btn:hover {
+      transform: translateY(-3px) rotate(-2deg) scale(1.05);
+      box-shadow: 4px 4px 0 var(--ink);
+      background: var(--yellow);
+      color: var(--ink);
+    }
+
+    .write-ai-btn:active {
+      transform: translateY(-1px) rotate(0deg) scale(1);
+      box-shadow: none;
+    }
+
+    .write-ai-btn:disabled {
+      opacity: .55;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
   </style>
 </head>
 
@@ -212,7 +252,10 @@
             <div class="write-hint">点击标签切换选中，选中标签会以红色高亮</div>
           </div>
           <div class="field">
-            <label>摘要</label>
+            <label>摘要
+              <button type="button" class="write-ai-btn" id="btn-ai-summary" onclick="aiSummary(event)"
+                title="AI 根据正文自动生成摘要(50-100字)">AI 摘要</button>
+            </label>
             <input type="text" id="f-summary" maxlength="500" placeholder="一句话概括文章内容（列表页展示）">
           </div>
           <div class="field">
@@ -220,7 +263,10 @@
             <input type="text" id="f-cover" placeholder="可选，例如 /uploads/2026/08/01/xxx.jpg">
           </div>
           <div class="field">
-            <label>正文（支持 HTML）*</label>
+            <label>正文（支持 HTML）*
+              <button type="button" class="write-ai-btn" id="btn-ai-polish" onclick="aiPolish(event)"
+                title="AI 润色正文(错别字/语病/表达),流式输出">AI 润色</button>
+            </label>
             <textarea id="f-content" required rows="16"
               placeholder="<p>支持 HTML，代码块用 &lt;pre&gt;&lt;code&gt;…&lt;/code&gt;&lt;/pre&gt;</p>"></textarea>
           </div>
@@ -236,7 +282,7 @@
 
   <footer class="footer" id="footer"></footer>
 
-  <script src="js/api.js?v=11"></script>
+  <script src="js/api.js?v=12"></script>
   <script src="js/common.js?v=19"></script>
   <script type="module" src="./src/main-public.jsx"></script>
   <script>
@@ -335,6 +381,37 @@
         toast(err.message, true);
         btn.disabled = false;
       }
+    }
+
+    // AI 生成摘要：新文章正文还没保存（无 articleId），直接把正文发给后端生成
+    async function aiSummary(ev) {
+      const content = document.getElementById('f-content').value.trim();
+      if (!content) { toast('请先填写正文，再生成摘要', true); return; }
+      const btn = ev.currentTarget;
+      const old = btn.textContent;
+      btn.disabled = true; btn.textContent = '生成中…';
+      try {
+        const data = await api.post('/api/ai/summary', { content });
+        document.getElementById('f-summary').value = data.summary || '';
+        toast('AI 摘要已生成，可手动修改');
+      } catch (e) { toast(e.message, true); }
+      finally { btn.disabled = false; btn.textContent = old; }
+    }
+
+    // AI 润色：正文发给后端，流式替换编辑器内容（打字机效果）
+    async function aiPolish(ev) {
+      const ta = document.getElementById('f-content');
+      const content = ta.value.trim();
+      if (!content) { toast('正文为空，请先填写内容', true); return; }
+      const btn = ev.currentTarget;
+      const old = btn.textContent;
+      btn.disabled = true; btn.textContent = '润色中…';
+      const orig = ta.value; // 备份，失败可恢复
+      ta.value = '';
+      try {
+        await streamRequest('/api/ai/polish', { content }, d => { ta.value += d; }, () => toast('润色完成，检查后保存'));
+      } catch (e) { ta.value = orig; toast(e.message, true); }
+      finally { btn.disabled = false; btn.textContent = old; }
     }
   </script>
 </body>

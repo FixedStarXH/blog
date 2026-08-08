@@ -15,6 +15,7 @@ type Config struct {
 	MySQL  MySQLConfig  `mapstructure:"mysql"`
 	Redis  RedisConfig  `mapstructure:"redis"`
 	JWT    JWTConfig    `mapstructure:"jwt"`
+	AI     AIConfig     `mapstructure:"ai"`
 }
 
 type RedisConfig struct {
@@ -45,6 +46,21 @@ type JWTConfig struct {
 	Secret string `mapstructure:"secret"`
 }
 
+// AIConfig AI 能力配置（摘要/润色/RAG 问答）
+// 兼容 OpenAI 接口格式（/v1/chat/completions、/v1/embeddings）：
+//   - 推荐 SiliconFlow(https://api.siliconflow.cn/v1)：一份 key 同时提供 chat 与 embedding，注册送免费额度
+//   - 也可换 DeepSeek(https://api.deepseek.com/v1) 等，只需改 base_url + 模型名
+//
+// 生产 key 用环境变量注入：BLOG_AI_API_KEY
+type AIConfig struct {
+	Enabled     bool   `mapstructure:"enabled"`
+	BaseURL     string `mapstructure:"base_url"`
+	APIKey      string `mapstructure:"api_key"`
+	ChatModel   string `mapstructure:"chat_model"`
+	EmbedModel  string `mapstructure:"embed_model"`
+	TimeoutSecs int    `mapstructure:"timeout_secs"`
+}
+
 func (m *MySQLConfig) DSN() string {
 	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local", m.User, m.Password, m.Host, m.Port, m.DBName)
 }
@@ -72,6 +88,13 @@ func Init() error {
 	viper.SetDefault("redis.port", 6379)
 	viper.SetDefault("redis.db", 0)
 	viper.SetDefault("jwt.secret", "my-secret-key-2026")
+	// AI 默认关闭：没配 key 时 AI 功能自动降级（摘要回退截取首段、问答返回提示）
+	viper.SetDefault("ai.enabled", false)
+	viper.SetDefault("ai.base_url", "https://api.siliconflow.cn/v1")
+	viper.SetDefault("ai.api_key", "")
+	viper.SetDefault("ai.chat_model", "deepseek-ai/DeepSeek-V3")
+	viper.SetDefault("ai.embed_model", "BAAI/bge-m3")
+	viper.SetDefault("ai.timeout_secs", 30)
 
 	// 本地开发：config.yaml 存在才读取（缺文件时不报错，Docker 场景只靠 env+默认值）
 	if _, err := os.Stat("config.yaml"); err == nil {
