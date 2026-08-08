@@ -15,7 +15,9 @@
 package cache
 
 import (
+	"fmt"
 	"log"
+	"math/rand/v2"
 	"strconv"
 	"time"
 )
@@ -88,38 +90,117 @@ func AddView(articleID uint, ip string) (int64, bool) {
 
 // FlushViews 定时刷库：把 Redis 增量合并进 MySQL，并同步累计值
 // 由 scheduler 每 30 秒调用；updateDB 是注入的 DAO 更新函数
+//
+// 并发安全设计（修复两个竞态）：
+//  1. 【多实例重复累加】两个实例同时执行都会读到同一批 dirty + 同一个 delta，
+//     各写一次库 → 浏览量翻倍。解决：Redis 分布式锁（SET NX EX），
+//     同一时刻只有一个实例能刷库。
+//  2. 【取增量与删增量之间的丢数】旧写法 GET → 写库 → DEL 三步非原子，
+//     GET 之后新来的浏览 INCR 增量会被随后的 DEL 一并删除，浏览量永久丢失。
+//     解决：Lua 脚本把"取增量 + 删增量"合成一个原子操作（兼容 Redis 2.6+）。
 func FlushViews(updateDB func(articleID uint, delta int64) error) {
 	if !Enabled || Client == nil {
 		return
 	}
-	// ① 取出所有待刷文章 ID（dirty 集合，AddView 时 SADD 加入）
+
+	// ① 分布式锁：多实例部署时只有一个实例能刷库
+	token, ok := acquireViewFlushLock()
+	if !ok {
+		return // 其他实例正在刷库，本轮直接跳过（下个周期再来）
+	}
+	defer releaseViewFlushLock(token)
+
+	// ② 取出所有待刷文章 ID（dirty 集合，AddView 时 SADD 加入）
 	ids, err := Client.SMembers(Ctx, viewDirtySet).Result()
 	if err != nil || len(ids) == 0 {
 		return
 	}
 
-	// ② 逐篇结算：GET 读增量 → 写库 → DEL 清增量
-	//    （用 GET+DEL 而非 GETDEL，兼容 Redis < 6.2；刷库成功后清空，失败保留 dirty 重试）
+	// ③ 逐篇结算：原子取出增量 → 写库 → 成功后再清 dirty
 	for _, idStr := range ids {
 		articleID, _ := strconv.ParseUint(idStr, 10, 64)
 		if articleID == 0 {
 			Client.SRem(Ctx, viewDirtySet, idStr)
 			continue
 		}
-		delta, err := Client.Get(Ctx, viewDeltaKey+idStr).Int64()
+		delta, err := getAndDelDelta(idStr)
 		if err != nil || delta <= 0 {
 			Client.SRem(Ctx, viewDirtySet, idStr)
 			continue
 		}
-		// ③ 写回 MySQL（失败则保留 dirty，下次 30 秒后再试）
+		// ④ 写回 MySQL（失败则把增量回补，等下次 30 秒后再试）
 		if err := updateDB(uint(articleID), delta); err != nil {
 			log.Printf("[cache] 浏览量刷库失败 article=%s: %v", idStr, err)
+			Client.IncrBy(Ctx, viewDeltaKey+idStr, delta) // 回补增量，防止丢失
 			continue
 		}
-		// ④ 刷库成功：清增量 + 移除脏标记
-		Client.Del(Ctx, viewDeltaKey+idStr)
-		Client.SRem(Ctx, viewDirtySet, idStr)
+		// ⑤ 刷库成功：若期间又来了新浏览（delta key 重新存在），
+		//    保留 dirty（AddView 已 SADD），等下一轮继续刷；否则清理 dirty
+		if n, _ := Client.Exists(Ctx, viewDeltaKey+idStr).Result(); n == 0 {
+			Client.SRem(Ctx, viewDirtySet, idStr)
+		}
 	}
+}
+
+// getAndDelDelta 原子取出并删除某篇文章的待刷增量（Lua 脚本实现）
+// 等价 Redis 6.2+ 的 GETDEL，但 Lua 兼容所有版本；取不到返回 0
+var getAndDelDeltaScript = `
+local delta = redis.call('GET', KEYS[1])
+if delta then
+    redis.call('DEL', KEYS[1])
+end
+return delta`
+
+func getAndDelDelta(idStr string) (int64, error) {
+	v, err := Client.Eval(Ctx, getAndDelDeltaScript, []string{viewDeltaKey + idStr}).Result()
+	if err != nil || v == nil {
+		return 0, err
+	}
+	switch n := v.(type) {
+	case int64:
+		return n, nil
+	case string:
+		var i int64
+		fmt.Sscanf(n, "%d", &i)
+		return i, nil
+	}
+	return 0, nil
+}
+
+// ------------------------------------------------------------------
+// 浏览量刷库的分布式锁（多实例防重）
+// ------------------------------------------------------------------
+
+const (
+	viewFlushLockKey = "view:flush:lock" // 刷库锁的 key
+	viewFlushLockTTL = 30 * time.Second  // 锁过期时间：刷库是毫秒级操作，30 秒足够且安全
+	viewFlushLockLua = `
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+else
+    return 0
+end` // 释放锁必须"先比 token 再 DEL"
+)
+
+// acquireViewFlushLock 获取刷库锁：SET NX EX 原子性保证同一时刻只有一个实例拿到锁。
+// 返回的 token 是持有者身份标识，释放时必须带着它（防止误删别人的锁）
+func acquireViewFlushLock() (token string, ok bool) {
+	token = fmt.Sprintf("%d-%d", time.Now().UnixNano(), rand.Int64())
+	ok, err := Client.SetNX(Ctx, viewFlushLockKey, token, viewFlushLockTTL).Result()
+	if err != nil {
+		return "", false
+	}
+	return token, ok
+}
+
+// releaseViewFlushLock 释放锁：Lua 先比较 token 再删除。
+// 为什么要比较？锁若已因超时过期、被别的实例重新获取，直接 DEL 会删掉别人的锁
+// （经典误删问题），比较 token 能确保只删自己的锁
+func releaseViewFlushLock(token string) {
+	if token == "" {
+		return
+	}
+	Client.Eval(Ctx, viewFlushLockLua, []string{viewFlushLockKey}, token)
 }
 
 // dedupKey 当日 IP 去重 key

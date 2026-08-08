@@ -1,53 +1,102 @@
 /* ============================================================
-   API 封装 — 统一请求 / 鉴权 / 错误处理
+   API 封装 — 统一请求 / 鉴权 / 错误处理 / 双 token 自动刷新
    基于接口文档契约:{ code, message, data }
    ============================================================ */
 
+// 清除全部登录凭证（access + refresh + 用户缓存）
+function clearAuth() {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('admin');
+}
+
+// 迁移清理：单 token 时代遗留的旧键（后端已不识别），避免与双 token 混淆
+localStorage.removeItem('token');
+
+// refreshing 缓存刷新 Promise：多个请求同时 401 时，只发一次刷新请求，其余等待同一个
+let refreshing = null;
+
+// 用 refresh token 换新双 token；返回是否成功
+// 失败（refresh 过期/被轮换）→ 前端清凭证回登录页
+function tryRefresh() {
+  const refreshToken = localStorage.getItem('refreshToken');
+  if (!refreshToken) return Promise.resolve(false);
+  if (!refreshing) {
+    refreshing = fetch('/api/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    })
+      .then(r => r.json())
+      .then(json => {
+        if (json.code === 200) {
+          localStorage.setItem('accessToken', json.data.accessToken);
+          localStorage.setItem('refreshToken', json.data.refreshToken);
+          return true;
+        }
+        return false;
+      })
+      .catch(() => false)
+      .finally(() => { refreshing = null; });
+  }
+  return refreshing;
+}
+
 // 统一请求
-async function request(method, url, data) {
-  const opts = { method, headers: {} };
-  const token = localStorage.getItem('token');
-  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+// noRefresh = true：该接口的 401 是业务失败（如登录密码错），不触发 token 刷新重放
+async function request(method, url, data, noRefresh) {
+  // 包装成可重放的请求体：401 且刷新成功后，用同一份参数重放一次
+  const doFetch = async (retried) => {
+    const opts = { method, headers: {} };
+    const token = localStorage.getItem('accessToken');
+    if (token) opts.headers['Authorization'] = 'Bearer ' + token;
 
-  if (data !== undefined) {
-    if (data instanceof FormData) {
-      opts.body = data; // 不设 Content-Type,浏览器自动带 boundary
-    } else {
-      opts.headers['Content-Type'] = 'application/json';
-      opts.body = JSON.stringify(data);
+    if (data !== undefined) {
+      if (data instanceof FormData) {
+        opts.body = data; // 不设 Content-Type,浏览器自动带 boundary
+      } else {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(data);
+      }
     }
-  }
 
-  let res;
-  try {
-    res = await fetch(url, opts);
-  } catch (e) {
-    throw new Error('网络请求失败,请检查后端是否启动');
-  }
+    let res;
+    try {
+      res = await fetch(url, opts);
+    } catch (e) {
+      throw new Error('网络请求失败,请检查后端是否启动');
+    }
 
-  let json;
-  try {
-    json = await res.json();
-  } catch (e) {
-    throw new Error('服务返回异常(' + res.status + ')');
-  }
+    let json;
+    try {
+      json = await res.json();
+    } catch (e) {
+      throw new Error('服务返回异常(' + res.status + ')');
+    }
 
-  // 业务 code 判断
-  if (json.code === 401) {
-    localStorage.removeItem('token');
-    localStorage.removeItem('admin');
-    if (location.pathname.includes('admin')) location.href = 'login.html';
-  }
-  if (json.code !== 200) {
-    throw new Error(json.message || '请求失败');
-  }
-  return json.data;
+    // 401 且还没重试过：先尝试刷新 token，成功则重放原请求
+    if (json.code === 401 && !retried && !noRefresh) {
+      const ok = await tryRefresh();
+      if (ok) return doFetch(true);
+      // 刷新也失败 → 登录态彻底失效：清凭证回登录页
+      clearAuth();
+      if (location.pathname.includes('admin')) location.href = 'login.html';
+      else if (!/login\.html|register\.html/.test(location.pathname)) location.href = 'login.html';
+      throw new Error(json.message || '登录已过期，请重新登录');
+    }
+
+    if (json.code !== 200) {
+      throw new Error(json.message || '请求失败');
+    }
+    return json.data;
+  };
+  return doFetch(false);
 }
 
 // 快捷方法
 const api = {
   get: (url) => request('GET', url),
-  post: (url, data) => request('POST', url, data),
+  post: (url, data, noRefresh) => request('POST', url, data, noRefresh),
   put: (url, data) => request('PUT', url, data),
   del: (url) => request('DELETE', url),
 };

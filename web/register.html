@@ -186,7 +186,7 @@
     </div>
   </div>
 
-  <script src="js/api.js?v=10"></script>
+  <script src="js/api.js?v=11"></script>
   <script>
     document.getElementById('password2').addEventListener('keydown', e => {
       if (e.key === 'Enter') doRegister(e);
@@ -207,8 +207,9 @@
       if (password !== password2) { errEl.textContent = '两次密码不一致'; errEl.style.display = 'block'; return; }
 
       try {
-        const data = await api.post('/api/auth/register', { username, email, password });
-        localStorage.setItem('token', data.token);
+        const data = await api.post('/api/auth/register', { username, email, password }, true);
+        localStorage.setItem('accessToken', data.accessToken);
+        localStorage.setItem('refreshToken', data.refreshToken);
         localStorage.setItem('admin', JSON.stringify(data.user));
         location.href = 'me.html';
       } catch (err) {

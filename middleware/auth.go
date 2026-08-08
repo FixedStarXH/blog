@@ -54,8 +54,8 @@ func AuthRequired() gin.HandlerFunc {
 		}
 		tokenString := strings.TrimPrefix(auth, "Bearer ")
 
-		// 2. 验签 + 过期校验（库内部完成）
-		claims, err := utils.ParseToken(tokenString)
+		// 2. 验签 + 类型校验（必须 access）+ 过期校验（库内部完成）
+		claims, err := utils.ParseToken(tokenString, "access")
 		if err != nil {
 			utils.Unauthorized(c, "登录已过期，请重新登录")
 			c.Abort()

@@ -24,7 +24,9 @@ func (d *TagDAO) FindAllWithCount(db *gorm.DB) ([]model.Tag, error) {
 	}
 	if err := db.Table("article_tags at").
 		Select("at.tag_id, COUNT(*) as count").
-		Joins("JOIN articles a ON a.id = at.article_id AND a.status = ?", model.ArticleStatusPublished).
+		// 注意：字符串 JOIN 不会自动注入软删除条件，必须手动加 a.deleted_at IS NULL，
+		// 否则已软删除的文章仍会被计入标签文章数（前台标签墙数字虚高）
+		Joins("JOIN articles a ON a.id = at.article_id AND a.status = ? AND a.deleted_at IS NULL", model.ArticleStatusPublished).
 		Group("at.tag_id").
 		Scan(&counts).Error; err != nil {
 		return nil, err
@@ -66,7 +68,8 @@ func (d *TagDAO) FindPage(db *gorm.DB, keyword string, page, pageSize int) ([]mo
 	}
 	if err := db.Table("article_tags at").
 		Select("at.tag_id, COUNT(*) as count").
-		Joins("JOIN articles a ON a.id = at.article_id AND a.status = ?", model.ArticleStatusPublished).
+		// 同 FindAllWithCount：字符串 JOIN 需手动补软删除条件，避免软删文章计入计数
+		Joins("JOIN articles a ON a.id = at.article_id AND a.status = ? AND a.deleted_at IS NULL", model.ArticleStatusPublished).
 		Group("at.tag_id").
 		Scan(&counts).Error; err != nil {
 		return nil, 0, err

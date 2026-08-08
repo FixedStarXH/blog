@@ -115,12 +115,13 @@ func DelPrefix(prefix string) {
 // ------------------------------------------------------------------
 
 const (
-	KeyArticleList = "articles:list:" // 文章列表：articles:list:{page}:{pageSize}:{...筛选参数}
-	KeyArticle     = "article:"       // 文章详情：article:{id}
-	KeyHot         = "articles:hot:"  // 热门文章：articles:hot:{limit}
-	KeyArchives    = "archives"       // 时间归档（只有一个）
-	KeyCategories  = "categories"     // 分类列表（含文章数）
-	KeyTags        = "tags"           // 标签列表（含文章数）
+	KeyArticleList  = "articles:list:" // 文章列表：articles:list:{page}:{pageSize}:{...筛选参数}
+	KeyArticle      = "article:"       // 文章详情：article:{id}
+	KeyHot          = "articles:hot:"  // 热门文章：articles:hot:{limit}
+	KeyArchives     = "archives"       // 时间归档（只有一个）
+	KeyCategories   = "categories"     // 分类列表（含文章数）
+	KeyTags         = "tags"           // 标签列表（含文章数）
+	KeyRefreshToken = "token:refresh:" // refresh token 白名单：token:refresh:{jti}，存在=有效（轮换吊销）
 )
 
 // 各缓存 TTL（秒）
@@ -129,6 +130,9 @@ const (
 	TTLDetail = 5 * time.Minute  // 详情：内容不常变，长一点
 	TTLStatic = 5 * time.Minute  // 分类/标签/归档等低频数据
 )
+
+// refreshTokenTTL 白名单 key 的 TTL：与 refresh token 有效期一致（7 天）
+const refreshTokenTTL = 7 * 24 * time.Hour
 
 // InvalidateArticleRelated 文章相关缓存全失效（新建/编辑/删除/审核后调用）
 // 一次清掉：该文章详情 + 所有列表 + 热门 + 归档 + 分类计数 + 标签计数
@@ -142,6 +146,43 @@ func InvalidateArticleRelated(articleID uint) {
 func InvalidateTaxonomy() {
 	Del(KeyCategories, KeyTags, KeyArchives)
 	DelPrefix(KeyArticleList)
+}
+
+// ------------------------------------------------------------------
+// refresh token 白名单（JWT 双 token 的轮换吊销）
+// ------------------------------------------------------------------
+// 为什么需要它？JWT 本身无状态、无法吊销。refresh token 有效期长达 7 天，
+// 一旦泄露就能一直换新 access。方案：签发时把 jti 写入 Redis 白名单，
+// 刷新时校验 + 轮换（旧的立即删掉）。旧 refresh 再拿来刷新 → 白名单查不到 → 拒绝。
+// Redis 挂了怎么办？CheckRefreshToken 返回 true 降级放行（只剩验签+查库），
+// 与项目"缓存故障静默降级"的哲学一致。
+
+// SaveRefreshToken 登记 refresh token 到白名单（登录/注册/刷新轮换后调用）
+func SaveRefreshToken(jti string) {
+	if !Enabled || jti == "" {
+		return
+	}
+	Client.Set(Ctx, KeyRefreshToken+jti, "1", refreshTokenTTL)
+}
+
+// CheckRefreshToken 检查 refresh token 是否仍有效：存在=有效，被轮换过/过期=无效
+func CheckRefreshToken(jti string) bool {
+	if !Enabled {
+		return true // Redis 不可用：降级放行（不引入"Redis 一挂全站强制下线"的问题）
+	}
+	if jti == "" {
+		return false
+	}
+	n, err := Client.Exists(Ctx, KeyRefreshToken+jti).Result()
+	return err == nil && n > 0
+}
+
+// RemoveRefreshToken 吊销 refresh token（刷新轮换 / 退出登录时调用）
+func RemoveRefreshToken(jti string) {
+	if !Enabled || jti == "" {
+		return
+	}
+	Client.Del(Ctx, KeyRefreshToken+jti)
 }
 
 func uintToString(v uint) string {

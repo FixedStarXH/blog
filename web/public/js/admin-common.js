@@ -2,9 +2,9 @@
    后台共享 — 鉴权检查 / 侧栏渲染 / 分页 / 工具
    ============================================================ */
 
-// 鉴权:无 token 跳登录
+// 鉴权:无 access token 跳登录
 function requireAuth() {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('accessToken');
   if (!token) { location.href = 'login.html'; return null; }
   return token;
 }
@@ -43,10 +43,13 @@ function renderSidebar(active) {
     </div>`;
 }
 
-// 退出
-function logout() {
-  localStorage.removeItem('token');
-  localStorage.removeItem('admin');
+// 退出：先吊销 refresh token，再清本地凭证
+async function logout() {
+  try {
+    const rt = localStorage.getItem('refreshToken');
+    if (rt) await api.post('/api/auth/logout', { refreshToken: rt });
+  } catch (e) { /* 忽略：网络失败也继续本地登出 */ }
+  clearAuth();
   location.href = 'login.html';
 }
 

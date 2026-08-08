@@ -20,7 +20,7 @@ export default function Topbar({ active, onSearch }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [admin] = useState(getStoredAdmin)
 
-  const token = localStorage.getItem('token')
+  const token = localStorage.getItem('accessToken')
   const navLink = (key, href, label, idx = '00') => (
     <a href={href} data-nav={key} className={key === active ? 'active' : undefined}>
       <i>{idx}</i> {label}

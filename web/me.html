@@ -202,15 +202,15 @@
 
   <footer class="footer" id="footer"></footer>
 
-  <script src="js/api.js?v=10"></script>
-  <script src="js/common.js?v=18"></script>
+  <script src="js/api.js?v=11"></script>
+  <script src="js/common.js?v=19"></script>
   <script type="module" src="./src/main-public.jsx"></script>
   <script>
     initPage('me').then(loadMe);
 
     async function loadMe() {
       const wrap = document.getElementById('me-wrap');
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       if (!token) {
         wrap.innerHTML = `<div class="empty" style="grid-column:1/13">
       请先<a href="login.html" style="color:var(--red);">登录</a>再访问个人中心</div>`;

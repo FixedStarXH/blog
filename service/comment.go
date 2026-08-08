@@ -26,6 +26,27 @@ func (s *CommentService) AddComment(articleID uint, content, nickname string, pa
 	if nickname == "" {
 		nickname = "游客"
 	}
+	// 校验文章存在且已发布（防止对任意 ID 产生孤儿评论）
+	var article model.Article
+	if err := s.db.Select("id").Where("status = ?", model.ArticleStatusPublished).First(&article, articleID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("文章不存在或未发布")
+		}
+		return nil, err
+	}
+	// 楼中楼：校验父评论存在且属于同一篇文章（防止跨文章"楼中楼"回复）
+	if parentID != nil {
+		var parent model.Comment
+		if err := s.db.Select("id", "article_id").First(&parent, *parentID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, errors.New("被回复的评论不存在")
+			}
+			return nil, err
+		}
+		if parent.ArticleID != articleID {
+			return nil, errors.New("被回复的评论不属于这篇文章")
+		}
+	}
 	comment := &model.Comment{
 		ArticleID: articleID,                   // 所属文章
 		Content:   content,                     // 评论内容

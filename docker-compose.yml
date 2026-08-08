@@ -1,0 +1,73 @@
+# 一键部署：docker compose up -d --build
+# 访问 http://localhost:8080 （首次启动会自动建表 + 种子数据）
+# 测试账号：admin / 123456（管理员）、editor / 123456（编辑）、user1 / 123456（普通用户）
+#
+# 说明：
+# - MySQL/Redis 不映射宿主机端口（只在 compose 内部网络互访），不会和本地已装的
+#   MySQL/Redis 冲突；如需外部工具连接，把 ports 注释取消即可
+# - app 的 8080 若与本地已启动的服务冲突，改下面 ports 的左侧宿主机端口即可
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: blog-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "123456"
+      MYSQL_DATABASE: "blog_system"
+      TZ: Asia/Shanghai
+    volumes:
+      - mysql-data:/var/lib/mysql
+    # ports:
+    #   - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p123456"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    container_name: blog-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    # ports:
+    #   - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: .
+    container_name: blog-app
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # 环境变量名 = config.go 里 BLOG_ 前缀 + 全大写路径（BLOG_MYSQL_HOST → mysql.host）
+      BLOG_SERVER_PORT: "8080"
+      BLOG_MYSQL_HOST: "mysql"
+      BLOG_MYSQL_PORT: "3306"
+      BLOG_MYSQL_USER: "root"
+      BLOG_MYSQL_PASSWORD: "123456"
+      BLOG_MYSQL_DBNAME: "blog_system"
+      BLOG_REDIS_HOST: "redis"
+      BLOG_REDIS_PORT: "6379"
+      BLOG_REDIS_DB: "0"
+      BLOG_JWT_SECRET: "my-secret-key-2026"
+    ports:
+      - "8080:8080"
+    volumes:
+      # 上传图片 / 运行日志落宿主机，容器重建不丢
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+
+volumes:
+  mysql-data:
+  redis-data:

@@ -85,6 +85,10 @@ func Init(r *gin.Engine) {
 		api.POST("/auth/register", middleware.RateLimitByIP(5, 10), authCtl.Register)
 		// 登录接口严格限流（防暴力破解密码：5/秒、突发 10，按 IP 维度）
 		api.POST("/auth/login", middleware.RateLimitByIP(5, 10), authCtl.Login)
+		// 刷新双 token（access 过期后用 refresh 换新；限流防暴力遍历 refresh token）
+		api.POST("/auth/refresh", middleware.RateLimitByIP(10, 20), authCtl.Refresh)
+		// 退出登录（吊销 refresh token）
+		api.POST("/auth/logout", authCtl.Logout)
 		// 后台登录（前端 admin/login.html 契约；编辑+ 才能进后台，角色校验在 handler 内）
 		api.POST("/admin/login", middleware.RateLimitByIP(5, 10), authCtl.AdminLogin)
 

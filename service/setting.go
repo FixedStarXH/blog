@@ -30,6 +30,11 @@ func (s *SettingService) GetDailyQuote() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// 名言池为空时兜底返回一句默认名言：
+	// rand.IntN(0) 会 panic（除零），管理员清空名言池时不能把公开接口打崩
+	if len(quotes) == 0 {
+		return "把每一个今天都当作新的开始。", nil
+	}
 	// rand.IntN(len) 返回 0..len-1 的随机整数，正好当切片下标
 	return quotes[rand.IntN(len(quotes))], nil
 }

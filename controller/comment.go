@@ -20,7 +20,7 @@ func NewCommentController(service *service.CommentService) *CommentController {
 // 发表评论请求体：昵称可选（免昵称），内容必填
 // 长度限制与前端 maxlength 一致（后端必须再校验一遍：前端限制只是 UI，可被直接调 API 绕过）
 type addCommentRequest struct {
-	Nickname string `json:"nickname" binding:"max=20"`          // 游客昵称，可选，最长 20 字
+	Nickname string `json:"nickname" binding:"max=20"`           // 游客昵称，可选，最长 20 字
 	Content  string `json:"content" binding:"required,max=1000"` // 评论内容，必填，最长 1000 字
 	ParentID *uint  `json:"parentId"`                            // 楼中楼：回复哪条评论，nil=顶级评论
 }
@@ -60,7 +60,8 @@ func (c *CommentController) AddComment(ctx *gin.Context) {
 
 	comment, err := c.service.AddComment(uint(id), req.Content, req.Nickname, req.ParentID)
 	if err != nil {
-		utils.Fail(ctx, "发表评论失败")
+		// 透传 service 的具体错误（如"文章不存在或未发布"），前端能明确提示原因
+		utils.Fail(ctx, err.Error())
 		return
 	}
 	utils.Success(ctx, comment)

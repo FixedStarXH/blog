@@ -80,7 +80,7 @@ func TestAuthRequiredValidToken(t *testing.T) {
 		c.JSON(http.StatusOK, gin.H{"userID": GetUserID(c), "role": GetRole(c)})
 	})
 
-	token, _ := utils.GenerateToken(5, 2) // 签发一个"用户5、编辑"的 token
+	token, _ := utils.GenerateAccessToken(5, 2) // 签发一个"用户5、编辑"的 access token
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodGet, "/api/me", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -100,7 +100,7 @@ func TestRequireRole(t *testing.T) {
 	})
 
 	// 用例1：role=1（普通用户）→ 403
-	token1, _ := utils.GenerateToken(1, model.RoleUser)
+	token1, _ := utils.GenerateAccessToken(1, model.RoleUser)
 	w1 := httptest.NewRecorder()
 	req1, _ := http.NewRequest(http.MethodGet, "/api/admin", nil)
 	req1.Header.Set("Authorization", "Bearer "+token1)
@@ -110,7 +110,7 @@ func TestRequireRole(t *testing.T) {
 	}
 
 	// 用例2：role=2（编辑）→ 200 放行
-	token2, _ := utils.GenerateToken(2, model.RoleEditor)
+	token2, _ := utils.GenerateAccessToken(2, model.RoleEditor)
 	w2 := httptest.NewRecorder()
 	req2, _ := http.NewRequest(http.MethodGet, "/api/admin", nil)
 	req2.Header.Set("Authorization", "Bearer "+token2)

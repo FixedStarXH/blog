@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -52,8 +54,30 @@ func Init() error {
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
 
-	if err := viper.ReadInConfig(); err != nil {
-		return fmt.Errorf("读取配置文件失败:%w", err)
+	// 环境变量覆盖配置（Docker Compose 用）：
+	//   BLOG_MYSQL_HOST → mysql.host、BLOG_REDIS_HOST → redis.host、BLOG_JWT_SECRET → jwt.secret …
+	// 本地开发不设环境变量时，仍然读 config.yaml 的值，行为不变
+	viper.SetEnvPrefix("BLOG")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv()
+
+	// 默认值：容器里没有 config.yaml（被 .gitignore 排除），全靠默认值 + 环境变量兜底
+	viper.SetDefault("server.port", 8080)
+	viper.SetDefault("mysql.host", "127.0.0.1")
+	viper.SetDefault("mysql.port", 3306)
+	viper.SetDefault("mysql.user", "root")
+	viper.SetDefault("mysql.password", "123456")
+	viper.SetDefault("mysql.dbname", "blog_system")
+	viper.SetDefault("redis.host", "127.0.0.1")
+	viper.SetDefault("redis.port", 6379)
+	viper.SetDefault("redis.db", 0)
+	viper.SetDefault("jwt.secret", "my-secret-key-2026")
+
+	// 本地开发：config.yaml 存在才读取（缺文件时不报错，Docker 场景只靠 env+默认值）
+	if _, err := os.Stat("config.yaml"); err == nil {
+		if err := viper.ReadInConfig(); err != nil {
+			return fmt.Errorf("读取配置文件失败:%w", err)
+		}
 	}
 
 	AppConfig = &Config{}

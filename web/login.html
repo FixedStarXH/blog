@@ -172,7 +172,7 @@
     </div>
   </div>
 
-  <script src="js/api.js?v=10"></script>
+  <script src="js/api.js?v=11"></script>
   <script>
     document.getElementById('password').addEventListener('keydown', e => {
       if (e.key === 'Enter') doLogin(e);
@@ -186,8 +186,9 @@
       errEl.style.display = 'none';
       if (!username || !password) { errEl.textContent = '请输入用户名和密码'; errEl.style.display = 'block'; return; }
       try {
-        const data = await api.post('/api/auth/login', { username, password });
-        localStorage.setItem('token', data.token);
+        const data = await api.post('/api/auth/login', { username, password }, true);
+        localStorage.setItem('accessToken', data.accessToken);
+        localStorage.setItem('refreshToken', data.refreshToken);
         localStorage.setItem('admin', JSON.stringify(data.user));
         // 编辑/管理员跳后台,普通用户跳个人中心
         if (data.user && data.user.role >= 2) location.href = 'admin/dashboard.html';

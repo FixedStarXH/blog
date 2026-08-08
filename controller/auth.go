@@ -18,9 +18,9 @@ func NewAuthController(service *service.AuthService) *AuthController {
 }
 
 type registerRequest struct {
-	Username string `json:"username" binding:"required"`       // 必填
-	Email    string `json:"email" binding:"required,email"`    // 必填 + 邮箱格式
-	Password string `json:"password" binding:"required,min=6"` // 必填 + 至少6位
+	Username string `json:"username" binding:"required,min=2,max=50"` // 必填 + 长度 2-50（与 DB size 对齐，防超长触发 MySQL 报错）
+	Email    string `json:"email" binding:"required,email"`           // 必填 + 邮箱格式
+	Password string `json:"password" binding:"required,min=6"`        // 必填 + 至少6位
 }
 
 type loginRequest struct {
@@ -39,6 +39,11 @@ type changePasswordRequest struct {
 	NewPassword string `json:"newPassword" binding:"required,min=6"`
 }
 
+// refreshRequest 刷新 token 请求体：携带 refresh token 换新
+type refreshRequest struct {
+	RefreshToken string `json:"refreshToken" binding:"required"`
+}
+
 // Register 注册
 func (c *AuthController) Register(ctx *gin.Context) {
 	var req registerRequest
@@ -48,13 +53,13 @@ func (c *AuthController) Register(ctx *gin.Context) {
 		return
 	}
 	// 第二步：调 service（service 返回什么错误，前端就收到什么文案）
-	user, token, err := c.service.Register(req.Username, req.Email, req.Password)
+	user, access, refresh, err := c.service.Register(req.Username, req.Email, req.Password)
 	if err != nil {
 		utils.Fail(ctx, err.Error())
 		return
 	}
-	// 第三步：成功响应
-	utils.Success(ctx, gin.H{"token": token, "user": user})
+	// 第三步：成功响应（双 token：access 业务用，refresh 过期后换新）
+	utils.Success(ctx, gin.H{"accessToken": access, "refreshToken": refresh, "user": user})
 }
 
 // Login 登录
@@ -64,12 +69,44 @@ func (c *AuthController) Login(ctx *gin.Context) {
 		utils.Fail(ctx, "参数错误："+err.Error())
 		return
 	}
-	user, token, err := c.service.Login(req.Username, req.Password)
+	user, access, refresh, err := c.service.Login(req.Username, req.Password)
 	if err != nil {
 		utils.Fail(ctx, err.Error())
 		return
 	}
-	utils.Success(ctx, gin.H{"token": token, "user": user})
+	utils.Success(ctx, gin.H{"accessToken": access, "refreshToken": refresh, "user": user})
+}
+
+// Refresh 刷新双 token：access 过期后，前端用 refresh 换新
+// POST /api/auth/refresh  Body: {"refreshToken":"..."}
+func (c *AuthController) Refresh(ctx *gin.Context) {
+	var req refreshRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		utils.Fail(ctx, "参数错误："+err.Error())
+		return
+	}
+	access, refresh, err := c.service.Refresh(req.RefreshToken)
+	if err != nil {
+		// 401：refresh 无效/过期/被轮换 → 前端清 token 回登录页
+		utils.Unauthorized(ctx, err.Error())
+		return
+	}
+	utils.Success(ctx, gin.H{"accessToken": access, "refreshToken": refresh})
+}
+
+// Logout 退出登录：吊销当前 refresh token（登出后旧 refresh 无法再换新）
+// POST /api/auth/logout  Body: {"refreshToken":"..."}
+func (c *AuthController) Logout(ctx *gin.Context) {
+	var req refreshRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		utils.Fail(ctx, "参数错误："+err.Error())
+		return
+	}
+	if err := c.service.Logout(req.RefreshToken); err != nil {
+		utils.Fail(ctx, err.Error())
+		return
+	}
+	utils.Success(ctx, nil)
 }
 
 // AdminLogin 后台登录（前端 admin/login.html 契约）
@@ -81,7 +118,7 @@ func (c *AuthController) AdminLogin(ctx *gin.Context) {
 		utils.Fail(ctx, "参数错误："+err.Error())
 		return
 	}
-	user, token, err := c.service.Login(req.Username, req.Password)
+	user, access, refresh, err := c.service.Login(req.Username, req.Password)
 	if err != nil {
 		utils.Fail(ctx, err.Error())
 		return
@@ -91,7 +128,7 @@ func (c *AuthController) AdminLogin(ctx *gin.Context) {
 		utils.Forbidden(ctx, "该账号无后台管理权限")
 		return
 	}
-	utils.Success(ctx, gin.H{"token": token, "user": user})
+	utils.Success(ctx, gin.H{"accessToken": access, "refreshToken": refresh, "user": user})
 }
 
 // Me 当前用户信息（需要登录）

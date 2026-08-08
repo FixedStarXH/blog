@@ -6,8 +6,27 @@ import (
 	"sort"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
+
+// 业务哨兵错误：用于在 DAO 内部区分"正常业务分支"与"真实错误"
+var (
+	errAlreadyViewed = errors.New("该IP当天已浏览过") // AddView：唯一约束命中，视为已访问
+	errAlreadyLiked  = errors.New("已点过赞")      // Like：唯一约束命中，视为已点赞
+)
+
+// isDuplicateEntry 判断错误是否为 MySQL 唯一键冲突（Duplicate entry，错误码 1062）
+// 用途：点赞/浏览的防重不再靠"先查后插"（有竞态），而是靠数据库唯一索引兜底——
+// 并发下只有一个请求插入成功，其余命中 Duplicate entry，在这里识别并转入业务分支
+func isDuplicateEntry(err error) bool {
+	var mysqlErr *mysql.MySQLError
+	if errors.As(err, &mysqlErr) {
+		return mysqlErr.Number == 1062
+	}
+	return false
+}
 
 type ArticleDAO struct{}
 
@@ -19,7 +38,10 @@ func (d *ArticleDAO) FindPublished(db *gorm.DB, keyword string, authorID uint, t
 	var articles []model.Article
 	var total int64
 
-	query := db.Model(&model.Article{}).Where("status = ?", model.ArticleStatusPublished)
+	// 列表不返回正文 Content（longtext 可达 200KB/篇）：
+	// 前端列表只显示标题/摘要/封面，排除正文能大幅减小响应体积和 Redis 缓存占用。
+	// 正文只在详情接口（FindPublishedByID）返回。
+	query := db.Model(&model.Article{}).Omit("content").Where("status = ?", model.ArticleStatusPublished)
 	if keyword != "" {
 		query = query.Where("title LIKE ? OR content LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
 	}
@@ -132,24 +154,39 @@ func (d *ArticleDAO) Delete(db *gorm.DB, id, authorID uint) error {
 }
 
 // AddView 浏览量 +1（IP 防刷 + 事务）
+//
+// 并发安全设计（修复"先查后插"竞态）：
+// 旧写法在事务外先 Count 判断"今天是否访问过"，两个并发请求都能通过 count==0 的检查，
+// 各自插一条明细并 +1，导致重复计数。新写法在事务内先 SELECT ... FOR UPDATE
+// 锁住文章的计数行（悲观锁）：同一篇文章的浏览请求被串行化，
+// 后到的请求在锁内重新查明细，发现已有记录就不再计数。
+// 注意：这是 Redis 缓存不可用时的降级路径，流量低，悲观锁开销可忽略。
 func (d *ArticleDAO) AddView(db *gorm.DB, articleID uint, ip string) (int64, error) {
 	startOfDay := time.Now().Truncate(24 * time.Hour)
-
-	var count int64
-	db.Model(&model.ArticleView{}).
-		Where("article_id = ? AND ip = ? AND viewed_at >= ?", articleID, ip, startOfDay).
-		Count(&count)
-
-	if count > 0 {
-		// 同 IP 当天已访问过：不重复+1，但仍返回当前浏览量
-		var v int64
-		db.Model(&model.Article{}).Where("id = ?", articleID).
-			Select("view_count").Scan(&v)
-		return v, nil
-	}
+	var current int64
 
 	err := db.Transaction(func(tx *gorm.DB) error {
-		// A. 插明细
+		// ① 锁住文章行（FOR UPDATE）：把并发浏览串行化，锁内再判断
+		var article model.Article
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Select("id", "view_count").
+			First(&article, articleID).Error; err != nil {
+			return err
+		}
+		current = int64(article.ViewCount)
+
+		// ② 锁内查"今天是否已访问过"（此时并发请求都在排队，结果可靠）
+		var count int64
+		if err := tx.Model(&model.ArticleView{}).
+			Where("article_id = ? AND ip = ? AND viewed_at >= ?", articleID, ip, startOfDay).
+			Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			return nil // 已访问过：不加数，current 已取到当前值
+		}
+
+		// ③ 首次访问：插明细 + 计数 +1（同一事务，要么都成功要么都回滚）
 		if err := tx.Create(&model.ArticleView{
 			ArticleID: articleID,
 			IP:        ip,
@@ -157,21 +194,15 @@ func (d *ArticleDAO) AddView(db *gorm.DB, articleID uint, ip string) (int64, err
 		}).Error; err != nil {
 			return err
 		}
-
-		if err := tx.Model(&model.Article{}).
+		current++
+		return tx.Model(&model.Article{}).
 			Where("id = ?", articleID).
-			UpdateColumn("view_count", gorm.Expr("view_count + 1")).Error; err != nil {
-			return err
-		}
-		return nil
+			UpdateColumn("view_count", gorm.Expr("view_count + 1")).Error
 	})
 	if err != nil {
 		return 0, err
 	}
-	var v int64
-	db.Model(&model.Article{}).Where("id = ?", articleID).
-		Select("view_count").Scan(&v)
-	return v, nil
+	return current, nil
 }
 
 // AddViewDelta 浏览量增量刷库（Redis 定时任务调用）：view_count = view_count + delta
@@ -187,37 +218,44 @@ type LikeResult struct {
 	Already   bool  `json:"already"` // true=已点过赞（本次是取消）
 }
 
+// Like 点赞/取消点赞（幂等 + 并发安全）
+//
+// 设计要点（修复旧版两个问题）：
+//   - 旧版在事务外先 Count 判断"是否已赞"，两个并发"取消"请求都能读到 count>0，
+//     都执行 DELETE + like_count-1，第二个 DELETE 删 0 行照样减 1，计数被多减。
+//     新版：先幂等 DELETE，用 RowsAffected 判断"是否真的取消了一行"，删 0 行就不减。
+//   - 减计数带下限 GREATEST(like_count-1, 0)：即使计数初始不一致，也永远不会变负数。
+//   - 点赞靠 (article_id, ip) 联合唯一索引兜底并发：并发点赞只有一个插入成功，
+//     其余命中 Duplicate entry（isDuplicateEntry）→ 视为已点赞，不重复加数。
 func (d *ArticleDAO) Like(db *gorm.DB, articleID uint, ip string) (*LikeResult, error) {
-	var count int64
-	db.Model(&model.ArticleLike{}).
+	// 先尝试取消（幂等）：DELETE 返回实际删除的行数
+	res := db.Unscoped().
 		Where("article_id = ? AND ip = ?", articleID, ip).
-		Count(&count)
-
-	if count > 0 {
-		// 已点过 → 取消点赞
-		err := db.Transaction(func(tx *gorm.DB) error {
-			if err := tx.Unscoped().Where("article_id = ? AND ip = ?", articleID, ip).
-				Delete(&model.ArticleLike{}).Error; err != nil {
-				return err
-			}
-			return tx.Model(&model.Article{}).
-				Where("id = ?", articleID).
-				UpdateColumn("like_count", gorm.Expr("like_count - 1")).Error
-		})
-		if err != nil {
+		Delete(&model.ArticleLike{})
+	if res.Error != nil {
+		return nil, res.Error
+	}
+	if res.RowsAffected > 0 {
+		// 确实取消了一行 → 减计数（带下限，防并发下多减成负数）
+		if err := db.Model(&model.Article{}).
+			Where("id = ?", articleID).
+			UpdateColumn("like_count", gorm.Expr("GREATEST(like_count - 1, 0)")).Error; err != nil {
 			return nil, err
 		}
 		var v int64
-		db.Model(&model.Article{}).Where("id = ?", articleID).
-			Select("like_count").Scan(&v)
+		db.Model(&model.Article{}).Where("id = ?", articleID).Select("like_count").Scan(&v)
 		return &LikeResult{LikeCount: v, Already: true}, nil
 	}
 
+	// 没取消到任何行 → 尝试点赞：唯一索引兜底，Duplicate 说明别人刚点过
 	err := db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&model.ArticleLike{
 			ArticleID: articleID,
 			IP:        ip,
 		}).Error; err != nil {
+			if isDuplicateEntry(err) {
+				return errAlreadyLiked
+			}
 			return err
 		}
 		return tx.Model(&model.Article{}).
@@ -225,11 +263,16 @@ func (d *ArticleDAO) Like(db *gorm.DB, articleID uint, ip string) (*LikeResult, 
 			UpdateColumn("like_count", gorm.Expr("like_count + 1")).Error
 	})
 	if err != nil {
+		if errors.Is(err, errAlreadyLiked) {
+			// 并发下已有人点赞：视为已点赞，不重复加数
+			var v int64
+			db.Model(&model.Article{}).Where("id = ?", articleID).Select("like_count").Scan(&v)
+			return &LikeResult{LikeCount: v, Already: true}, nil
+		}
 		return nil, err
 	}
 	var v int64
-	db.Model(&model.Article{}).Where("id = ?", articleID).
-		Select("like_count").Scan(&v)
+	db.Model(&model.Article{}).Where("id = ?", articleID).Select("like_count").Scan(&v)
 	return &LikeResult{LikeCount: v, Already: false}, nil
 }
 
@@ -393,10 +436,19 @@ func (d *ArticleDAO) UpdateTopBatch(db *gorm.DB, ids []uint, isTop bool) (int64,
 	return result.RowsAffected, result.Error
 }
 
-// DeleteBatch 批量删除（后台批量删除用，软删除）
+// DeleteBatch 批量软删除：同一事务内先清多对多中间表再删主表，
+// 避免残留 article_tags 死引用（软删除的文章仍占着标签关联记录）
 func (d *ArticleDAO) DeleteBatch(db *gorm.DB, ids []uint) (int64, error) {
-	result := db.Where("id IN ?", ids).Delete(&model.Article{})
-	return result.RowsAffected, result.Error
+	var affected int64
+	err := db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("DELETE FROM article_tags WHERE article_id IN ?", ids).Error; err != nil {
+			return err
+		}
+		result := tx.Where("id IN ?", ids).Delete(&model.Article{})
+		affected = result.RowsAffected
+		return result.Error
+	})
+	return affected, err
 }
 
 // UpdateByID 按 ID 直接更新（后台文章编辑用，不校验作者）

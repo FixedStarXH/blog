@@ -173,7 +173,18 @@ func (s *ArticleService) UpdateMyArticle(id, authorID, categoryID uint, title, c
 }
 
 func (s *ArticleService) DeleteMyArticle(id, authorID uint) error {
-	if err := s.dao.Delete(s.db, id, authorID); err != nil {
+	// 归属校验 + 清多对多中间表 + 软删除，一个事务完成
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		// 先校验作者归属（防 IDOR：别人不能删你的文章）
+		if _, err := s.dao.FindByIDAndAuthor(tx, id, authorID); err != nil {
+			return err
+		}
+		// 清多对多中间表：软删除的文章仍占着 article_tags 记录，不清理会留下脏引用
+		if err := tx.Exec("DELETE FROM article_tags WHERE article_id = ?", id).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&model.Article{}, id).Error
+	}); err != nil {
 		return err
 	}
 	cache.InvalidateArticleRelated(id)
@@ -440,7 +451,13 @@ func (s *ArticleService) AdminDeleteArticle(id uint) error {
 		}
 		return err
 	}
-	if err := s.db.Delete(&model.Article{}, id).Error; err != nil {
+	// 清多对多中间表 + 软删除，一个事务完成（避免残留 article_tags 死引用）
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("DELETE FROM article_tags WHERE article_id = ?", id).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&model.Article{}, id).Error
+	}); err != nil {
 		return err
 	}
 	cache.InvalidateArticleRelated(id)

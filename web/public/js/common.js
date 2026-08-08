@@ -10,10 +10,13 @@ function getStoredAdmin() {
   catch (e) { return null; }
 }
 
-// 退出登录
-function doLogout() {
-  localStorage.removeItem('token');
-  localStorage.removeItem('admin');
+// 退出登录：先调接口吊销 refresh token（登出后旧 refresh 无法再换新），再清本地凭证
+async function doLogout() {
+  try {
+    const rt = localStorage.getItem('refreshToken');
+    if (rt) await api.post('/api/auth/logout', { refreshToken: rt });
+  } catch (e) { /* 网络失败也继续本地登出 */ }
+  clearAuth();
   toast('已退出登录');
   setTimeout(() => location.reload(), 500);
 }

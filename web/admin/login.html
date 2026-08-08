@@ -32,7 +32,7 @@
     </div>
   </div>
 
-  <script src="../js/api.js?v=7"></script>
+  <script src="../js/api.js?v=8"></script>
   <script>
     document.getElementById('password').addEventListener('keydown', e => {
       if (e.key === 'Enter') doLogin(e);
@@ -46,8 +46,9 @@
       errEl.style.display = 'none';
       if (!username || !password) { errEl.textContent = '请输入用户名和密码'; errEl.style.display = 'block'; return; }
       try {
-        const data = await api.post('/api/admin/login', { username, password });
-        localStorage.setItem('token', data.token);
+        const data = await api.post('/api/admin/login', { username, password }, true);
+        localStorage.setItem('accessToken', data.accessToken);
+        localStorage.setItem('refreshToken', data.refreshToken);
         localStorage.setItem('admin', JSON.stringify(data.user));
         location.href = 'dashboard.html';
       } catch (e) {
