@@ -86,7 +86,7 @@
       <div class="image-cell">
         <img src="${esc(img.url)}" alt="${esc(img.name)}">
         <button class="i-del" onclick="delImg(${img.id})">✕</button>
-        <div class="i-url" title="点击复制" onclick="copyUrl('${esc(img.url)}')">${esc(img.url)}</div>
+        <div class="i-url" title="点击复制" data-copy-url="${esc(img.url)}">${esc(img.url)}</div>
       </div>`).join('') || '<div class="empty" style="grid-column:1/-1">暂无图片</div>';
         renderPager(document.getElementById('pagination'), page, Math.max(1, Math.ceil(d.total / pageSize)), reload);
       } catch (e) { toast(e.message, true); }
@@ -96,6 +96,12 @@
       try { await navigator.clipboard.writeText(url); toast('已复制: ' + url); }
       catch (e) { toast(url); }
     }
+
+    // 事件委托处理"复制 URL"：data-* 属性安全传递，避免 onclick 内联拼字符串注入
+    document.getElementById('img-grid').addEventListener('click', e => {
+      const el = e.target.closest('[data-copy-url]');
+      if (el) copyUrl(el.dataset.copyUrl);
+    });
 
     async function delImg(id) {
       if (!confirm('确定删除该图片?')) return;

@@ -57,13 +57,18 @@ func (s *CategoryService) CreateCategory(name, description string, sort int) err
 }
 
 // UpdateCategory 修改分类：先确认存在（GORM 的 Updates 查不到行不报错），
-// 改名时查重，但查到的是"自己"就允许
+// 改名时查重，但查到的是"自己"就允许；name 为空表示"不改名"
 func (s *CategoryService) UpdateCategory(id uint, name, description string, sort int) error {
 	if _, err := s.dao.FindByID(s.db, id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("分类不存在")
 		}
 		return err
+	}
+	// 只更新实际传入的字段：name 为空时绝不能覆盖数据库里的原名
+	updates := map[string]interface{}{
+		"description": description,
+		"sort":        sort,
 	}
 	if name != "" {
 		exist, err := s.dao.FindByName(s.db, name)
@@ -74,12 +79,9 @@ func (s *CategoryService) UpdateCategory(id uint, name, description string, sort
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
+		updates["name"] = name
 	}
-	if err := s.dao.Update(s.db, id, map[string]interface{}{
-		"name":        name,
-		"description": description,
-		"sort":        sort,
-	}); err != nil {
+	if err := s.dao.Update(s.db, id, updates); err != nil {
 		return err
 	}
 	cache.InvalidateTaxonomy()

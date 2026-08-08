@@ -36,8 +36,10 @@ func (s *ArticleService) GetPublishedArticles(keyword string, authorID uint, tag
 		page = 1
 	}
 	// 缓存 key：把筛选参数全拼进去（不同筛选条件 = 不同缓存条目）
-	key := fmt.Sprintf("%s%d:%d:%s:%d:%s:%d:%d",
-		cache.KeyArticleList, page, pageSize, tag, categoryID, sortBy, authorID, len(keyword))
+	// 注意：keyword 必须拼原文，不能用 len(keyword)——
+	// 长度相同的不同关键词（如 "abc" 和 "xyz"）会命中同一条缓存，返回错误的搜索结果
+	key := fmt.Sprintf("%s%d:%d:%s:%d:%s:%d:%s",
+		cache.KeyArticleList, page, pageSize, tag, categoryID, sortBy, authorID, keyword)
 
 	// ① 读缓存
 	var cached articleListCache
@@ -74,8 +76,8 @@ func (s *ArticleService) GetArticleByID(id uint) (*model.Article, error) {
 		return &article, nil
 	}
 
-	// ② 缓存未命中 → 查数据库
-	a, err := s.dao.FindByID(s.db, id)
+	// ② 缓存未命中 → 查数据库（只查已发布文章：草稿/待审/驳回不对外）
+	a, err := s.dao.FindPublishedByID(s.db, id)
 	if err != nil {
 		return nil, err
 	}
@@ -150,15 +152,19 @@ func (s *ArticleService) UpdateMyArticle(id, authorID, categoryID uint, title, c
 	if article.Status == model.ArticleStatusDraft || article.Status == model.ArticleStatusRejected {
 		updates["status"] = model.ArticleStatusPending
 	}
-	if err := s.dao.Update(s.db, id, authorID, updates); err != nil {
-		return err
-	}
-
-	tags := make([]model.Tag, 0, len(tagIDs))
-	for _, tid := range tagIDs {
-		tags = append(tags, model.Tag{BaseModel: model.BaseModel{ID: tid}})
-	}
-	if err := s.db.Model(&model.Article{BaseModel: model.BaseModel{ID: id}}).Association("Tags").Replace(tags); err != nil {
+	// 更新字段 + 替换标签必须在同一个事务里：
+	// 否则"字段更新成功、标签替换失败"会留下内容与标签不一致的脏数据
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		if err := s.dao.Update(tx, id, authorID, updates); err != nil {
+			return err
+		}
+		tags := make([]model.Tag, 0, len(tagIDs))
+		for _, tid := range tagIDs {
+			tags = append(tags, model.Tag{BaseModel: model.BaseModel{ID: tid}})
+		}
+		return tx.Model(&model.Article{BaseModel: model.BaseModel{ID: id}}).Association("Tags").Replace(tags)
+	})
+	if err != nil {
 		return err
 	}
 	// 内容/标签变了 → 失效该文章详情 + 列表缓存
@@ -235,8 +241,8 @@ func (s *ArticleService) GetArchives() ([]model.Archive, error) {
 
 // GetArticleNav 文章导航：上一篇 + 下一篇 + 相关推荐
 func (s *ArticleService) GetArticleNav(id uint) (*model.ArticleNav, error) {
-	// ① 先查当前文章，拿到它的 CategoryID 和 CreatedAt（三个查询都靠它）
-	article, err := s.dao.FindByID(s.db, id)
+	// ① 先查当前文章（只允许已发布文章有导航：草稿/待审/驳回 前台访问一律 404）
+	article, err := s.dao.FindPublishedByID(s.db, id)
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +326,8 @@ func (s *ArticleService) RejectArticle(id uint, reason string) error {
 // UnlockArticle 私密文章解锁：密码正确返回全文
 // 用 crypto/subtle 恒定时间比较，防时序攻击（响应时间与"错几位"无关）
 func (s *ArticleService) UnlockArticle(id uint, password string) (*model.Article, error) {
-	article, err := s.dao.FindByID(s.db, id)
+	// 只允许解锁已发布文章：草稿/待审/驳回文章即使密码对了也不能通过这里拿到全文
+	article, err := s.dao.FindPublishedByID(s.db, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("文章不存在")
@@ -406,15 +413,19 @@ func (s *ArticleService) AdminUpdateArticle(id, categoryID uint, title, content,
 		"status":      status,
 		"is_top":      isTop,
 	}
-	if err := s.dao.UpdateByID(s.db, id, updates); err != nil {
-		return err
-	}
-	// 替换标签（多对多）
-	tags := make([]model.Tag, 0, len(tagIDs))
-	for _, tid := range tagIDs {
-		tags = append(tags, model.Tag{BaseModel: model.BaseModel{ID: tid}})
-	}
-	if err := s.db.Model(&model.Article{BaseModel: model.BaseModel{ID: id}}).Association("Tags").Replace(tags); err != nil {
+	// 更新字段 + 替换标签事务化：避免"内容已改、标签没改"的脏数据
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := s.dao.UpdateByID(tx, id, updates); err != nil {
+			return err
+		}
+		// 替换标签（多对多）
+		tags := make([]model.Tag, 0, len(tagIDs))
+		for _, tid := range tagIDs {
+			tags = append(tags, model.Tag{BaseModel: model.BaseModel{ID: tid}})
+		}
+		return tx.Model(&model.Article{BaseModel: model.BaseModel{ID: id}}).Association("Tags").Replace(tags)
+	})
+	if err != nil {
 		return err
 	}
 	cache.InvalidateArticleRelated(id)

@@ -72,6 +72,7 @@ func (s *TagService) UpdateTag(id uint, name string) error {
 		}
 		return err
 	}
+	// name 为空表示"不改名"，绝不能覆盖数据库里的原名
 	if name != "" {
 		dup, err := s.dao.FindByName(s.db, name)
 		if err == nil {
@@ -81,10 +82,11 @@ func (s *TagService) UpdateTag(id uint, name string) error {
 		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
+		if err := s.dao.Update(s.db, id, map[string]interface{}{"name": name}); err != nil {
+			return err
+		}
 	}
-	if err := s.dao.Update(s.db, id, map[string]interface{}{"name": name}); err != nil {
-		return err
-	}
+	// name 为空时无需更新（标签只有 name 一个业务字段），直接结束
 	cache.InvalidateTaxonomy()
 	return nil
 }

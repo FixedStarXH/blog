@@ -2,7 +2,9 @@ package controller
 
 import (
 	"fmt"
+	"io"
 	"math/rand/v2"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,6 +26,16 @@ var allowedExt = map[string]bool{
 	".png":  true,
 	".gif":  true,
 	".webp": true,
+}
+
+// 扩展名 → 真实 MIME 类型（内容校验用：扩展名和文件头必须一致）
+// 只信任扩展名不够——把 exe/php 改名成 .png 也能通过白名单，这是常见的上传绕过手段
+var extMIME = map[string]string{
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".png":  "image/png",
+	".gif":  "image/gif",
+	".webp": "image/webp",
 }
 
 const maxUploadSize = 5 << 20 // 5MB（5 << 20 = 5 * 1024 * 1024 字节）
@@ -60,7 +72,27 @@ func (c *UploadController) UploadImage(ctx *gin.Context) {
 		return
 	}
 
-	// ④ 生成全新文件名（绝不用用户文件名：防路径穿越 + 防重名覆盖）
+	// ④ 内容校验（magic number）：打开文件读头部 512 字节，
+	// 用 http.DetectContentType 识别真实类型，必须与扩展名一致
+	// 防止"改扩展名伪装"：exe/php/脚本改名成 .png 也能过白名单，存进服务器就是后门
+	src, err := file.Open()
+	if err != nil {
+		utils.Error(ctx, "读取文件失败")
+		return
+	}
+	defer src.Close()
+	head := make([]byte, 512)
+	n, err := src.Read(head)
+	if err != nil && err != io.EOF {
+		utils.Error(ctx, "读取文件失败")
+		return
+	}
+	if got := http.DetectContentType(head[:n]); got != extMIME[ext] {
+		utils.Fail(ctx, "文件内容与扩展名不符，疑似伪装文件")
+		return
+	}
+
+	// ⑤ 生成全新文件名（绝不用用户文件名：防路径穿越 + 防重名覆盖）
 	newName := fmt.Sprintf("%d_%s%s", time.Now().UnixNano(), randomString(8), ext)
 	dir := "uploads"
 	if err := os.MkdirAll(dir, 0o755); err != nil { // 目录不存在就创建
@@ -73,17 +105,17 @@ func (c *UploadController) UploadImage(ctx *gin.Context) {
 		return
 	}
 
-	// ⑤ 记录到图库表（元信息入库，后台图库页靠它列出所有图）
+	// ⑥ 记录到图库表（元信息入库，后台图库页靠它列出所有图）
 	url := "/uploads/" + newName
 	_ = c.imageDAO.Create(c.db, &model.Image{
-		Name:       file.Filename,                        // 原始文件名（展示用）
-		URL:        url,                                  // 访问路径
-		Size:       file.Size,                            // 字节大小
-		Ext:        strings.TrimPrefix(ext, "."),         // 去掉点的扩展名
-		UploaderID: middleware.GetUserID(ctx),            // 上传者（admin 组必登录，可拿 ID）
+		Name:       file.Filename,                // 原始文件名（展示用）
+		URL:        url,                          // 访问路径
+		Size:       file.Size,                    // 字节大小
+		Ext:        strings.TrimPrefix(ext, "."), // 去掉点的扩展名
+		UploaderID: middleware.GetUserID(ctx),    // 上传者（admin 组必登录，可拿 ID）
 	})
 
-	// ⑥ 返回访问 URL：/uploads 已被 r.Static 映射到本地目录
+	// ⑦ 返回访问 URL：/uploads 已被 r.Static 映射到本地目录
 	utils.Success(ctx, gin.H{"url": url})
 }
 

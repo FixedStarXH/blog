@@ -112,9 +112,12 @@ func (d *TagDAO) Update(db *gorm.DB, id uint, updates map[string]interface{}) er
 }
 
 // Delete 删除标签：先清中间表 article_tags 的死引用，再删标签本身
+// 两步放同一事务：中间表清了、标签删除失败会回滚，不产生孤儿引用
 func (d *TagDAO) Delete(db *gorm.DB, id uint) error {
-	if err := db.Exec("DELETE FROM article_tags WHERE tag_id = ?", id).Error; err != nil {
-		return err
-	}
-	return db.Delete(&model.Tag{}, id).Error
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("DELETE FROM article_tags WHERE tag_id = ?", id).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&model.Tag{}, id).Error
+	})
 }

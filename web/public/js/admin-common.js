@@ -37,7 +37,7 @@ function renderSidebar(active) {
         </a>`).join('')}
     </nav>
     <div class="user">
-      <div class="name">${admin ? (admin.nickname || admin.username || '管理员') : '管理员'}</div>
+      <div class="name">${esc(admin ? (admin.nickname || admin.username || '管理员') : '管理员')}</div>
       <span class="logout" onclick="logout()">退出登录 →</span>
       <a class="to-blog" href="../index.html">← 返回博客</a>
     </div>`;

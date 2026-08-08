@@ -63,6 +63,20 @@ func (d *ArticleDAO) FindByID(db *gorm.DB, id uint) (*model.Article, error) {
 	return &article, nil
 }
 
+// FindPublishedByID 按 ID 查【已发布】文章（公开接口专用）
+// 区别 FindByID：多了 status 过滤，草稿/待审核/已驳回/已排期文章前台一律查不到，
+// 防止游客遍历 ID 读到未发布的正文（IDOR 漏洞修复点）
+func (d *ArticleDAO) FindPublishedByID(db *gorm.DB, id uint) (*model.Article, error) {
+	var article model.Article
+	err := db.Preload("Author").Preload("Category").Preload("Tags").
+		Where("status = ?", model.ArticleStatusPublished).
+		First(&article, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &article, nil
+}
+
 func (d *ArticleDAO) FindByAuthorID(db *gorm.DB, authorID uint, status, page, pageSize int) ([]model.Article, int64, error) {
 	var articles []model.Article
 	var total int64

@@ -3,6 +3,7 @@ package middleware
 import (
 	"strings"
 
+	"blog-system/model"
 	"blog-system/utils"
 
 	"github.com/gin-gonic/gin"
@@ -61,11 +62,29 @@ func AuthRequired() gin.HandlerFunc {
 			return
 		}
 
-		// 3. 把身份信息放进 context，后续 handler 用 GetUserID/GetRole 取
-		c.Set("userID", claims.UserID)
-		c.Set("role", claims.Role)
+		// 3. 查库确认用户真实状态：
+		//    JWT 本身无状态，若只靠验签，禁用/删除的用户旧 token 依然有效，
+		//    角色被降级后旧 token 也继续持有旧权限。这里以数据库为准：
+		//    - 用户不存在（被删）→ 401
+		//    - 用户被禁用（status=0）→ 401
+		//    - role 用数据库里的最新值覆盖 token 里的旧值（权限变更即时生效）
+		var user model.User
+		if err := model.DB.Select("id", "role", "status").First(&user, claims.UserID).Error; err != nil {
+			utils.Unauthorized(c, "账号不存在，请重新登录")
+			c.Abort()
+			return
+		}
+		if user.Status != model.UserStatusActive {
+			utils.Unauthorized(c, "账号已被禁用")
+			c.Abort()
+			return
+		}
 
-		// 4. 放行，继续执行后面的 handler
+		// 4. 把身份信息放进 context，后续 handler 用 GetUserID/GetRole 取
+		c.Set("userID", user.ID)
+		c.Set("role", user.Role)
+
+		// 5. 放行，继续执行后面的 handler
 		c.Next()
 	}
 }

@@ -47,13 +47,47 @@ func (b *tokenBucket) allow() bool {
 	return false
 }
 
-// RateLimit 生成限流中间件
-// rps: 每秒补充令牌数；burst: 桶容量（瞬时突发上限）
-// 令牌用完 → 429 Too Many Requests
-func RateLimit(rps, burst int) gin.HandlerFunc {
-	limiter := newTokenBucket(rps, burst)
+// RateLimitByIP 按 IP 维度限流：每个客户端 IP 一个独立的令牌桶
+// 相比全局单桶 RateLimit：单个 IP 刷爆自己的配额只会让自己被限，
+// 不会把所有人的配额耗尽（避免一个攻击者拖垮全站）
+//
+// 注意：IP 取自 gin 的 ClientIP()（优先信任 X-Forwarded-For，适合 Nginx 反代部署）。
+// 直连部署时客户端可伪造该头绕过 —— 个人博客可接受；如要更严格请改用 c.RemoteIP()
+func RateLimitByIP(rps, burst int) gin.HandlerFunc {
+	var mu sync.Mutex
+	buckets := make(map[string]*tokenBucket)
+
+	// 定期清理长时间不活跃的桶，防止 map 无限增长（内存泄漏）
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			now := time.Now()
+			mu.Lock()
+			for ip, b := range buckets {
+				b.mu.Lock()
+				idle := now.Sub(b.lastTime)
+				b.mu.Unlock()
+				if idle > 30*time.Minute {
+					delete(buckets, ip)
+				}
+			}
+			mu.Unlock()
+		}
+	}()
+
 	return func(c *gin.Context) {
-		if !limiter.allow() {
+		ip := c.ClientIP()
+		// 取桶：map 并发读写不安全，先加锁取/建，取到桶后再用桶自己的锁放行
+		mu.Lock()
+		b, ok := buckets[ip]
+		if !ok {
+			b = newTokenBucket(rps, burst)
+			buckets[ip] = b
+		}
+		mu.Unlock()
+
+		if !b.allow() {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"code":    429,
 				"message": "请求过于频繁，请稍后再试",

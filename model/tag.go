@@ -8,7 +8,7 @@ package model
 type Tag struct {
 	BaseModel
 
-	Name string `gorm:"unique;not null;size:50;comment:标签名" json:"name"` // 标签名全局唯一
+	Name string `gorm:"unique;not null;size:50;comment:标签名" json:"name"` // 标签名唯一（复合索引 (name,deleted_at) 由 init.go 迁移）
 
 	// 反向关联：这个标签下的文章（按标签查文章时配合中间表过滤）
 	// json:"-" 不在标签对象里输出文章列表，避免数据冗余

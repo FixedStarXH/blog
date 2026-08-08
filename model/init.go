@@ -51,9 +51,60 @@ func InitDB() error {
 		return fmt.Errorf("自动迁移失败:%w", err)
 	}
 
+	// 软删除 + 唯一索引冲突修复：见 ensureSoftDeleteUniqueIndexes 注释
+	ensureSoftDeleteUniqueIndexes()
+
 	initTestData()
 
 	return nil
+}
+
+// ensureSoftDeleteUniqueIndexes 软删除 + 唯一索引冲突修复迁移
+//
+// 背景：BaseModel 有软删除（DeletedAt），而 Username/Email/Tag.Name/Category.Name
+// 之前用 gorm:"unique"（单列唯一索引）。MySQL 里被软删除的行依然占着唯一索引，
+// 导致"删除的用户无法重新注册、删除的标签无法重建"（Duplicate entry）。
+//
+// 修复：改成复合唯一索引 (业务字段, deleted_at)。
+//   - 软删除行：deleted_at 有值（时间戳），与"新行 deleted_at 为 NULL"不同
+//   - MySQL 唯一索引允许 NULL：deleted_at IS NULL 的新行之间互相唯一，
+//     新行与已删除行（deleted_at 非 NULL）也不冲突 → 删除后可重建同名
+//
+// 为什么不用 gorm:"uniqueIndex,priority:1/2" 直接声明在模型上？
+//
+//	GORM 能自动建复合索引，但【已存在的表】不会删掉旧的单列唯一索引——
+//	两个索引同时存在，旧的依然拦新数据。所以这里做显式迁移：
+//	DROP 旧单列唯一索引 → ADD 同名复合唯一索引。幂等，可重复执行。
+func ensureSoftDeleteUniqueIndexes() {
+	type idx struct{ table, column, index string }
+	indexes := []idx{
+		{"users", "username", "uni_users_username"},
+		{"users", "email", "uni_users_email"},
+		{"tags", "name", "uni_tags_name"},
+		{"categories", "name", "uni_categories_name"},
+	}
+	for _, it := range indexes {
+		// 幂等检查：目标索引已经是复合索引（第 2 列是 deleted_at）→ 跳过
+		// 避免每次启动都执行 DROP+CREATE（DDL 会重建索引，表大时耗时长）
+		if isCompositeIndex(it.table, it.index) {
+			continue
+		}
+		// 否则：删旧单列唯一索引 → 建 (列, deleted_at) 复合唯一索引
+		DB.Exec(fmt.Sprintf("ALTER TABLE `%s` DROP INDEX `%s`", it.table, it.index))
+		if err := DB.Exec(fmt.Sprintf("ALTER TABLE `%s` ADD UNIQUE INDEX `%s` (`%s`, `deleted_at`)", it.table, it.index, it.column)).Error; err != nil {
+			fmt.Printf("[warn] 创建复合唯一索引失败 %s.%s: %v\n", it.table, it.index, err)
+		}
+	}
+}
+
+// isCompositeIndex 判断指定索引是否为"包含 deleted_at 第二列"的复合索引
+// 通过 information_schema 查索引列：seq_in_index=2 的列是 deleted_at 即视为已迁移
+func isCompositeIndex(table, index string) bool {
+	var cnt int64
+	DB.Raw(`SELECT COUNT(*) FROM information_schema.statistics
+		WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?
+		AND seq_in_index = 2 AND column_name = 'deleted_at'`, table, index).Scan(&cnt)
+	return cnt > 0
 }
 
 // mustHash 种子数据专用：生成密码哈希

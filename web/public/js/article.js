@@ -220,9 +220,17 @@ function fixBrokenImages() {
       // 隐藏裂图
       img.style.display = 'none';
       // 在图片后插入原文链接提示（CSDN 原文地址，而非博客主页）
+      // 用 DOM API 构造而非 innerHTML 拼字符串：sourceUrl 可能含引号/尖括号，
+      // 直接拼 href 会形成属性注入（XSS），createElement + setAttribute 天然安全
       const note = document.createElement('div');
       note.className = 'img-fallback';
-      note.innerHTML = '<a href="' + target + '" target="_blank" rel="noopener" style="font-size:12px;color:var(--gray-a);border:1px dashed var(--line);display:inline-block;padding:8px 14px;margin:8px 0;">[图片加载失败] 查看原文 →</a>';
+      const link = document.createElement('a');
+      link.href = target;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.style.cssText = 'font-size:12px;color:var(--gray-a);border:1px dashed var(--line);display:inline-block;padding:8px 14px;margin:8px 0;';
+      link.textContent = '[图片加载失败] 查看原文 →';
+      note.appendChild(link);
       img.parentNode.insertBefore(note, img.nextSibling);
     });
     // 立即检查已失败的图
@@ -533,7 +541,7 @@ function renderComments(list) {
         <span class="c-time">${fmtDate(c.createdAt)}</span>
       </div>
       <div class="c-body">${esc(c.content)}</div>
-      <button class="c-reply-btn" onclick="setReply(${c.id},'${esc(c.nickname || '匿名')}')">回复</button>
+      <button class="c-reply-btn" data-reply-id="${c.id}" data-reply-name="${esc(c.nickname || '匿名')}">回复</button>
       ${reply.filter(r => r.parentId === c.id).map(r => `
         <div class="reply">
           <div class="c-meta">
@@ -543,6 +551,15 @@ function renderComments(list) {
           <div class="c-body">${esc(r.content)}</div>
         </div>`).join('')}
     </div>`).join('');
+
+  // 事件委托处理"回复"按钮：不能用 onclick 内联拼 JS 字符串——
+  // esc() 转义出的 &#39; 会被 HTML 解析器解码回 '，昵称含引号即可注入脚本（XSS）。
+  // data-* 属性由浏览器安全解码，setReply 只把值放进 placeholder，不会执行。
+  listEl.onclick = (e) => {
+    const btn = e.target.closest('.c-reply-btn');
+    if (!btn) return;
+    setReply(Number(btn.dataset.replyId), btn.dataset.replyName || '匿名');
+  };
 }
 
 function setReply(pid, name) {
