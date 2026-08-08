@@ -196,7 +196,7 @@ func classifyAll(db *gorm.DB) {
 	db.Find(&articles)
 
 	for _, a := range articles {
-		catName, tagNames := classify(a.Title)
+		catName, tagNames := classify(a.Title, a.Summary, a.Content)
 		catID := catMap[catName]
 		if catID == 0 {
 			catID = catMap["随笔"] // 兜底
@@ -208,9 +208,12 @@ func classifyAll(db *gorm.DB) {
 		// 替换标签（多对多：Association.Replace 清旧建新）
 		tags := make([]model.Tag, 0, len(tagNames))
 		for _, tn := range tagNames {
-			if id, ok := tagMap[tn]; ok {
-				tags = append(tags, model.Tag{BaseModel: model.BaseModel{ID: id}})
+			id, ok := tagMap[tn]
+			if !ok || id == 0 {
+				fmt.Printf("      [!] 忽略未知标签名: %q\n", tn)
+				continue
 			}
+			tags = append(tags, model.Tag{BaseModel: model.BaseModel{ID: id}})
 		}
 		if err := db.Model(&model.Article{BaseModel: model.BaseModel{ID: a.ID}}).
 			Association("Tags").Replace(tags); err != nil {
@@ -221,17 +224,23 @@ func classifyAll(db *gorm.DB) {
 	}
 }
 
-// classify 根据标题返回（分类名, 标签名列表）
+// classify 根据标题判定分类、按全文（标题+摘要+正文）叠加标签
+// 返回（分类名, 标签名列表）
 // 顺序敏感：先判定大类，再叠加细标签
-func classify(title string) (string, []string) {
-	// 统一小写 + 去多余空格，便于关键词匹配
+func classify(title, summary, content string) (string, []string) {
+	// 标题（分类判定用，避免正文提及他类技术导致误判）
 	t := strings.ToLower(normalize(title))
+	// 全文（标签匹配用：正文关键词更多，标签覆盖更全）
+	full := strings.ToLower(normalize(title + " " + summary + " " + stripHTML(content)))
 	tags := []string{}
 	cat := ""
 
 	// ---- 1. 大类判定（顺序即优先级）----
 	// 英文关键词用 hasWord（词边界），避免 "engineering" 误含 "gin"
 	switch {
+	case containsAny(t, "算法", "数据结构"):
+		cat = "算法"
+
 	case hasWord(t, "java", "spring", "jvm", "javaweb") || containsAny(t, "注解", "异常"):
 		cat = "Java"
 
@@ -251,9 +260,6 @@ func classify(title string) (string, []string) {
 	case hasWord(t, "tcp", "http", "socket") || containsAny(t, "网络", "协议"):
 		cat = "网络编程"
 
-	case containsAny(t, "算法", "数据结构"):
-		cat = "算法"
-
 	case hasWord(t, "sdd") || containsAny(t, "工程", "规范", "架构", "工具", "接口") ||
 		containsAny(t, "claude code", "harness"):
 		cat = "工程实践"
@@ -265,7 +271,7 @@ func classify(title string) (string, []string) {
 		cat = "随笔"
 	}
 
-	// ---- 2. 细标签叠加（一篇可多标签）----
+	// ---- 2. 细标签叠加（一篇可多标签，基于全文）----
 	// 顺序无优先级，命中即加；用 set 去重
 	set := map[string]bool{}
 	add := func(names ...string) {
@@ -275,160 +281,168 @@ func classify(title string) (string, []string) {
 	}
 
 	// Go 生态（英文用 hasWord 防子串误判）
-	if hasWord(t, "gin") {
+	if hasWord(full, "gin") {
 		add("gin")
 	}
-	if hasWord(t, "gorm") {
+	if hasWord(full, "gorm") {
 		add("gorm")
 	}
-	if hasWord(t, "viper") {
+	if hasWord(full, "viper") {
 		add("viper")
 	}
-	if hasWord(t, "context") {
+	if hasWord(full, "context") {
 		add("context")
 	}
-	if containsAny(t, "反射") {
+	if containsAny(full, "反射") {
 		add("反射")
 	}
-	if containsAny(t, "泛型") {
+	if containsAny(full, "泛型") {
 		add("泛型")
 	}
-	if hasWord(t, "interface") {
+	if hasWord(full, "interface") {
 		add("interface")
 	}
-	if containsAny(t, "错误") {
+	if containsAny(full, "错误") {
 		add("错误处理")
 	}
 
 	// 并发
-	if hasWord(t, "goroutine") || containsAny(t, "并发") {
+	if hasWord(full, "goroutine") || containsAny(full, "并发") {
 		add("goroutine", "channel")
 	}
-	if hasWord(t, "channel") {
+	if hasWord(full, "channel") {
 		add("channel")
 	}
-	if hasWord(t, "gmp") {
+	if hasWord(full, "gmp") {
 		add("GMP调度", "源码解析")
 	}
-	if hasWord(t, "waitgroup") {
+	if hasWord(full, "waitgroup") {
 		add("WaitGroup")
 	}
-	if containsAny(t, "锁") || hasWord(t, "mutex") {
+	if containsAny(full, "锁") || hasWord(full, "mutex") {
 		add("mutex")
 	}
-	if containsAny(t, "多线程") {
+	if containsAny(full, "多线程") {
 		add("多线程")
 	}
 
 	// Java
-	if hasWord(t, "spring") {
+	if hasWord(full, "spring") {
 		add("Spring Boot")
 	}
-	if hasWord(t, "jvm") {
+	if hasWord(full, "jvm") {
 		add("JVM")
 	}
-	if containsAny(t, "注解") {
+	if containsAny(full, "注解") {
 		add("注解")
 	}
-	if containsAny(t, "集合") {
+	if containsAny(full, "集合") {
 		add("集合")
 	}
-	if containsAny(t, "异常") {
+	if containsAny(full, "异常") {
 		add("异常")
+	}
+	// IO：独立词 i/o、io 流、NIO 等都算（注意 "io" 是 2 字母，用词边界防误判）
+	if hasWord(full, "io") || hasWord(full, "nio") || hasWord(full, "bio") || hasWord(full, "i/o") ||
+		containsAny(full, "io流", "输入输出", "流详解") {
+		add("IO")
 	}
 
 	// 数据库
-	if hasWord(t, "mysql") {
+	if hasWord(full, "mysql") {
 		add("MySQL")
 	}
-	if hasWord(t, "redis") {
+	if hasWord(full, "redis") {
 		add("Redis")
 	}
-	if containsAny(t, "索引") {
+	if containsAny(full, "索引") {
 		add("索引", "性能优化")
 	}
-	if containsAny(t, "事务") {
+	if containsAny(full, "事务") {
 		add("事务")
 	}
-	if containsAny(t, "缓存") {
+	if containsAny(full, "缓存") {
 		add("缓存")
+	}
+	if containsAny(full, "sql优化") || (hasWord(full, "sql") && containsAny(full, "优化")) {
+		add("SQL优化")
 	}
 
 	// 前端
-	if hasWord(t, "javascript") {
+	if hasWord(full, "javascript") {
 		add("JavaScript")
 	}
-	if hasWord(t, "html") {
+	if hasWord(full, "html") {
 		add("HTML")
 	}
-	if hasWord(t, "css") {
+	if hasWord(full, "css") {
 		add("CSS")
 	}
-	if containsAny(t, "面向对象") {
+	if containsAny(full, "面向对象") {
 		add("面向对象")
 	}
-	if containsAny(t, "面向过程") {
+	if containsAny(full, "面向过程") {
 		add("面向过程")
 	}
 
 	// AI
-	if hasWord(t, "llm") || containsAny(t, "大模型") {
+	if hasWord(full, "llm") || containsAny(full, "大模型") {
 		add("LLM")
 	}
-	if hasWord(t, "agent") {
+	if hasWord(full, "agent") {
 		add("Agent")
 	}
-	if hasWord(t, "prompt") {
+	if hasWord(full, "prompt") {
 		add("Prompt")
 	}
-	if hasWord(t, "react") && hasWord(t, "agent") {
+	if hasWord(full, "react") && hasWord(full, "agent") {
 		add("ReAct")
 	}
-	if containsAny(t, "大模型") && (containsAny(t, "训练") || containsAny(t, "应用")) {
+	if containsAny(full, "大模型") && (containsAny(full, "训练") || containsAny(full, "应用")) {
 		add("大模型训练")
 	}
-	if hasWord(t, "skill") {
+	if hasWord(full, "skill") {
 		add("Skill")
 	}
 
 	// 网络
-	if hasWord(t, "tcp") || containsAny(t, "网络") {
+	if hasWord(full, "tcp") || containsAny(full, "网络") {
 		add("TCP")
 	}
-	if hasWord(t, "http") {
+	if hasWord(full, "http") {
 		add("HTTP")
 	}
-	if hasWord(t, "socket") {
+	if hasWord(full, "socket") {
 		add("Socket")
 	}
 
 	// 通用属性标签
-	if containsAny(t, "入门", "从零", "初学", "总结") || strings.Contains(t, "从 0") {
+	if containsAny(full, "入门", "从零", "初学", "总结") || strings.Contains(full, "从 0") {
 		add("入门")
 	}
-	if containsAny(t, "实战", "搭建", "玩转") {
+	if containsAny(full, "实战", "搭建", "玩转") {
 		add("实战")
 	}
-	if containsAny(t, "源码") {
+	if containsAny(full, "源码") {
 		add("源码解析")
 	}
-	if containsAny(t, "面试") {
+	if containsAny(full, "面试") {
 		add("面试")
 	}
-	if containsAny(t, "优化", "性能") {
+	if containsAny(full, "优化", "性能") {
 		add("性能优化")
 	}
-	if containsAny(t, "爬虫") {
+	if containsAny(full, "爬虫") {
 		add("爬虫")
 	}
 	// 工具标签：仅明确工具名才加（"指南"不等同工具，已移除）
-	if containsAny(t, "claude code", "harness", "工具") {
+	if containsAny(full, "claude code", "harness", "工具") {
 		add("工具")
 	}
-	if containsAny(t, "规范", "sdd") {
+	if containsAny(full, "规范", "sdd") {
 		add("规范")
 	}
-	if containsAny(t, "算法") {
+	if containsAny(full, "算法") {
 		add("算法")
 	}
 
@@ -441,6 +455,27 @@ func classify(title string) (string, []string) {
 		tags = append(tags, n)
 	}
 	return cat, tags
+}
+
+// stripHTML 去掉 HTML 标签，保留纯文本（正文关键词匹配用）
+func stripHTML(s string) string {
+	var b strings.Builder
+	inTag := false
+	for _, r := range s {
+		if r == '<' {
+			inTag = true
+			continue
+		}
+		if r == '>' {
+			inTag = false
+			b.WriteByte(' ')
+			continue
+		}
+		if !inTag {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // hasWord 判断 s 是否包含任意英文关键词作为「独立词」出现

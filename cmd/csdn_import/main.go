@@ -1,14 +1,17 @@
 // 命令：go run ./cmd/csdn_import
 //
-// 功能：抓取指定 CSDN 博客的文章（列表页拿 ID/摘要/时间，详情页拿标题/正文 HTML），
-//
-//	通过后台接口以指定账号身份批量导入本站。
+// 功能：
+//  1. 抓取指定 CSDN 博客的文章（列表页拿 ID/摘要/时间，详情页拿标题/正文 HTML），
+//     通过后台接口以指定账号身份批量导入本站。
+//  2. 搜索模式：-search "关键词" 从 CSDN 搜索 API 按关键词找全网文章导入，
+//     用于补齐本站缺失的分类/标签（如 泛型/IO/爬虫/CSS）。
 //
 // 常用参数：
 //
 //	go run ./cmd/csdn_import -dry              # 试跑：只抓不导入，先看解析对不对
 //	go run ./cmd/csdn_import                   # 试跑：只导入第一篇
 //	go run ./cmd/csdn_import -all              # 全量导入
+//	go run ./cmd/csdn_import -search "Go 泛型" # 搜索模式：按关键词抓取导入
 //
 // 教学点：
 //  1. 反爬三件套：浏览器 User-Agent + Referer + 请求间隔（time.Sleep）
@@ -23,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -40,6 +44,8 @@ var (
 	blogPass  = flag.String("login-pass", "123456", "博客后台密码")
 	importAll = flag.Bool("all", false, "true=全量导入；false=只导入第一篇（试跑）")
 	dryRun    = flag.Bool("dry", false, "true=只抓不导入（预览解析结果）")
+	searchKW  = flag.String("search", "", "搜索模式：按关键词从 CSDN 搜索全网文章导入（可逗号分隔多个关键词）")
+	searchMax = flag.Int("search-max", 5, "搜索模式：每个关键词最多导入几篇")
 )
 
 // 仿浏览器请求头：CSDN 对无 UA 的请求直接回验证页
@@ -66,11 +72,13 @@ var (
 	reTitle = regexp.MustCompile(`(?s)<h1[^>]*class="title-article"[^>]*>(.*?)</h1>`)
 )
 
-// articleMeta 列表页一篇文章的信息（正文在详情页，标题也从详情页取，保证一致）
+// articleMeta 一篇文章的信息（正文在详情页，标题也从详情页取，保证一致）
 type articleMeta struct {
 	ID      string // CSDN 文章ID
 	Summary string // 摘要（纯文本）
 	Date    string // 发布时间
+	Title   string // 搜索模式：搜索结果的标题（列表模式为空，从详情页取）
+	Author  string // 搜索模式：作者用户名（详情页 URL 需要）
 }
 
 // ==================== 抓取 CSDN ====================
@@ -147,8 +155,12 @@ func fetchListPage(page int) ([]articleMeta, error) {
 }
 
 // fetchArticle 抓详情页，提取标题 + 正文 HTML（失败自动重试，绕过反爬的偶发拦截）
-func fetchArticle(id string) (title, content string, err error) {
-	url := fmt.Sprintf("https://blog.csdn.net/%s/article/details/%s", *csdnUser, id)
+// author 为空时用默认用户（列表模式）；非空时用该作者（搜索模式抓的是全网文章）
+func fetchArticle(id, author string) (title, content string, err error) {
+	if author == "" {
+		author = *csdnUser
+	}
+	url := fmt.Sprintf("https://blog.csdn.net/%s/article/details/%s", author, id)
 	for attempt := 1; attempt <= retryTimes; attempt++ {
 		detailHTML, e := fetchHTML(url)
 		if e != nil {
@@ -218,6 +230,83 @@ func cleanText(s string) string {
 	}
 	// Fields 按空白拆分再拼接 = 合并多余空格/换行
 	return strings.Join(strings.Fields(b.String()), " ")
+}
+
+// ==================== 搜索模式（CSDN 搜索 API） ====================
+
+// searchResult 搜索结果里的一篇文章（结构只取我们需要的字段）
+type searchResult struct {
+	ArticleID  string `json:"articleid"`
+	Title      string `json:"title"`           // 可能带 <em> 高亮标签
+	Author     string `json:"nickname"`        // 作者用户名
+	URL        string `json:"url"`             // 详情页 URL（含作者名）
+	Digest     string `json:"digest"`          // 摘要/简介
+	CreateTime string `json:"create_time_str"` // 发布时间字符串
+}
+
+// searchResp CSDN 搜索 API 的响应（只解析需要的字段）
+type searchResp struct {
+	Total     int            `json:"total"`
+	ResultVOS []searchResult `json:"result_vos"`
+}
+
+// fetchSearch 按关键词搜索 CSDN 全网博客文章（分页），返回元信息列表
+func fetchSearch(keyword string, page int) ([]articleMeta, error) {
+	apiURL := fmt.Sprintf("https://so.csdn.net/api/v3/search?q=%s&t=blog&p=%d",
+		urlQueryEscape(keyword), page)
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Referer", "https://so.csdn.net/")
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d 搜索失败: %s", resp.StatusCode, keyword)
+	}
+
+	var r searchResp
+	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+		return nil, err
+	}
+
+	metas := make([]articleMeta, 0, len(r.ResultVOS))
+	for _, s := range r.ResultVOS {
+		if s.ArticleID == "" {
+			continue
+		}
+		m := articleMeta{
+			ID:      s.ArticleID,
+			Title:   cleanText(s.Title), // 去 <em> 高亮标签
+			Summary: cleanText(s.Digest),
+			Date:    strings.TrimSpace(s.CreateTime),
+			Author:  s.Author,
+		}
+		// 详情页 URL 里可能带 ops_request_misc 等参数，只保留作者+ID 部分
+		if s.URL != "" {
+			if parts := strings.Split(s.URL, "article/details/"); len(parts) == 2 {
+				m.Author = strings.TrimSuffix(strings.TrimPrefix(parts[0], "https://blog.csdn.net/"), "/")
+				if idx := strings.Index(parts[1], "?"); idx > 0 {
+					m.ID = parts[1][:idx]
+				} else {
+					m.ID = parts[1]
+				}
+			}
+		}
+		metas = append(metas, m)
+	}
+	return metas, nil
+}
+
+// urlQueryEscape 对搜索关键词做 URL 编码（保留中文可读性无碍，交给 url 包）
+func urlQueryEscape(s string) string {
+	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
 }
 
 // ==================== 调用博客后端 ====================
@@ -296,7 +385,7 @@ func login() (string, error) {
 func existingTitles(token string) (map[string]bool, error) {
 	set := map[string]bool{}
 	for page := 1; ; page++ {
-		url := fmt.Sprintf("%s/api/admin/articles?page=%d&pageSize=100", *baseURL, page)
+		url := fmt.Sprintf("%s/api/admin/articles?page=%d&pageSize=50", *baseURL, page) // 后台 pageSize 上限 50，传大了会被重置
 		r, err := getJSON(url, token)
 		if err != nil {
 			return nil, err
@@ -324,18 +413,23 @@ func existingTitles(token string) (map[string]bool, error) {
 }
 
 // importArticle 通过后台接口导入一篇文章（status=1 直接发布）
+// author 用于拼 CSDN 原文地址（裂图兜底跳转用）：列表模式 = 默认用户，搜索模式 = 原作者
 func importArticle(token string, m articleMeta, title, content string) error {
+	author := m.Author
+	if author == "" {
+		author = *csdnUser
+	}
 	payload := map[string]any{
 		"title":      title,
 		"content":    content,
 		"summary":    m.Summary,
-		"categoryId": 1, // 固定进分类 1（导入后可在后台自行调整）
+		"categoryId": 1, // 先统一进分类 1，导入后跑 tag_fix 自动重分配分类和标签
 		"status":     1, // 直接发布
 		"isTop":      false,
 		"password":   "",
 		"publishAt":  nil,
 		"tagIds":     []int{},
-		"sourceUrl":  fmt.Sprintf("https://blog.csdn.net/%s/article/details/%s", *csdnUser, m.ID), // CSDN 原文地址（裂图兜底跳转用）
+		"sourceUrl":  fmt.Sprintf("https://blog.csdn.net/%s/article/details/%s", author, m.ID), // CSDN 原文地址（裂图兜底跳转用）
 	}
 	r, err := postJSON(*baseURL+"/api/admin/articles", token, payload)
 	if err != nil {
@@ -351,6 +445,16 @@ func importArticle(token string, m articleMeta, title, content string) error {
 
 func main() {
 	flag.Parse()
+
+	if *searchKW != "" {
+		runSearchMode()
+		return
+	}
+	runListMode()
+}
+
+// runListMode 列表模式：抓指定用户博客的全部文章导入
+func runListMode() {
 	fmt.Printf("==> CSDN 用户: %s\n", *csdnUser)
 
 	// ① 登录博客后台
@@ -392,11 +496,63 @@ func main() {
 	}
 	fmt.Printf("==> 共发现 %d 篇文章\n", len(metas))
 
-	// ④ 逐篇抓详情 + 导入（含图片提取与上传）
+	importLoop(token, exists, metas, true)
+}
+
+// runSearchMode 搜索模式：按关键词从 CSDN 全网找文章导入
+func runSearchMode() {
+	keywords := strings.Split(*searchKW, ",")
+	fmt.Printf("==> 搜索模式: %d 个关键词（每个最多导入 %d 篇）\n", len(keywords), *searchMax)
+
+	token, err := login()
+	if err != nil {
+		fmt.Println("[失败]", err)
+		return
+	}
+	fmt.Printf("==> 后台登录成功: %s\n", *blogUser)
+
+	exists, err := existingTitles(token)
+	if err != nil {
+		fmt.Println("[失败]", err)
+		return
+	}
+	fmt.Printf("==> 本站已有文章 %d 篇（同标题将跳过）\n", len(exists))
+
+	var metas []articleMeta
+	for _, kw := range keywords {
+		kw = strings.TrimSpace(kw)
+		if kw == "" {
+			continue
+		}
+		list, err := fetchSearch(kw, 1)
+		if err != nil {
+			fmt.Printf("  [搜索 %q] 失败: %v\n", kw, err)
+			continue
+		}
+		if len(list) == 0 {
+			fmt.Printf("  [搜索 %q] 无结果\n", kw)
+			continue
+		}
+		// 只取前 searchMax 篇
+		if len(list) > *searchMax {
+			list = list[:*searchMax]
+		}
+		fmt.Printf("  [搜索 %q] 找到 %d 篇（取前 %d）\n", kw, len(list), *searchMax)
+		metas = append(metas, list...)
+		time.Sleep(sleepBetween)
+	}
+	fmt.Printf("==> 共收集 %d 篇待导入\n", len(metas))
+
+	importLoop(token, exists, metas, false)
+}
+
+// importLoop 逐篇抓详情 + 导入（含幂等跳过与反爬熔断）
+// listMode=true：列表模式（受 -all 试跑控制）；false：搜索模式（默认全量）
+func importLoop(token string, exists map[string]bool, metas []articleMeta, listMode bool) {
 	imported, skipped, failed := 0, 0, 0
 	consecutiveFails := 0 // 连续失败计数：连续 3 篇失败 = 大概率触发反爬（521），提前停，避免无效重试
 	for i, m := range metas {
-		title, content, err := fetchArticle(m.ID)
+		title, content, err := fetchArticle(m.ID, m.Author)
 		if err != nil {
 			fmt.Printf("  [%d/%d] 抓详情失败(id=%s): %v\n", i+1, len(metas), m.ID, err)
 			failed++
@@ -427,10 +583,11 @@ func main() {
 			} else {
 				fmt.Printf("        + 导入成功\n")
 				imported++
+				exists[title] = true // 同一批里防重复标题
 			}
 		}
 
-		if !*importAll {
+		if !*importAll && listMode {
 			fmt.Println("==> 试跑模式（-all 全量导入），已停止")
 			break
 		}
