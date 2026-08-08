@@ -7,8 +7,8 @@ uploads/
 # 运行时日志（slog 输出，7.3 新增）
 logs/
 
-# 本地 UI 设计稿/草稿（不上传，仅本地使用）
-docs/design/
+# 本地文档（不上传，仅本地使用）
+docs/
 ui-interaction-effects.md
 
 # 编译产物
