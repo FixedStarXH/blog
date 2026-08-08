@@ -141,7 +141,7 @@ func Init(r *gin.Engine) {
 		admin.POST("/categories", categoryCtl.CreateCategory)
 		admin.PUT("/categories/:id", categoryCtl.UpdateCategory)
 		admin.DELETE("/categories/:id", categoryCtl.DeleteCategory)
-		admin.GET("/tags", tagCtl.GetTagList) // 后台标签管理列表（admin/tags.html 契约）
+		admin.GET("/tags", tagCtl.GetAdminTagList) // 后台标签管理列表（分页，admin/tags.html 契约）
 		admin.POST("/tags", tagCtl.CreateTag)
 		admin.PUT("/tags/:id", tagCtl.UpdateTag)
 		admin.DELETE("/tags/:id", tagCtl.DeleteTag)
@@ -154,8 +154,8 @@ func Init(r *gin.Engine) {
 		admin.POST("/comments/batch", commentCtl.BatchCommentOp)
 	}
 
-	// 前端 SPA 静态资源托管(web/ 目录)
-	webDir := "./web"
+	// 前端构建产物托管(dist/ 目录，由 web/ Vite 工程构建生成，源文件在 web/)
+	webDir := "./dist"
 	r.Static("/web", webDir)
 	r.Static("/uploads", "./uploads")
 

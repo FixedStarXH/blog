@@ -1,11 +1,11 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>标签管理 — 后台</title>
-  <link rel="stylesheet" href="../css/admin.css?v=8">
+  <link rel="stylesheet" href="../css/admin.css?v=10">
 </head>
 
 <body>
@@ -16,21 +16,21 @@
         <h1>标签管理</h1>
         <button class="btn primary" onclick="openForm()">+ 新建标签</button>
       </div>
+
+      <!-- 工具栏：关键词搜索 + 总数统计 -->
+      <div class="toolbar">
+        <input type="search" id="f-keyword" placeholder="搜索标签名…" onkeydown="if(event.key==='Enter')reload(1)">
+        <button class="btn sm" onclick="reload(1)">搜索</button>
+        <span class="toolbar-total">共 <b id="tag-total">0</b> 个标签</span>
+      </div>
+
+      <!-- 卡片网格 -->
       <div class="panel">
-        <div class="panel-body" style="padding:0;">
-          <table class="data">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>标签名</th>
-                <th>文章数</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="tbody"></tbody>
-          </table>
+        <div class="panel-body" style="padding:18px;">
+          <div class="tag-card-grid" id="tag-grid"></div>
         </div>
       </div>
+      <div class="pagination" id="pagination"></div>
     </main>
   </div>
 
@@ -53,25 +53,51 @@
   </div>
 
   <script src="../js/api.js?v=7"></script>
-  <script src="../js/admin-common.js?v=8"></script>
+  <script src="../js/admin-common.js?v=9"></script>
   <script>
     initAdmin('tags');
-    let editingId = null;
 
-    async function reload() {
+    let editingId = null;
+    let page = 1;
+    const pageSize = 12; // 每页 12 个标签
+    let currentTags = []; // 当前页数据，供编辑回填
+
+    async function reload(p) {
+      if (p) page = p;
+      const kw = document.getElementById('f-keyword').value.trim();
+      const q = new URLSearchParams({ page, pageSize });
+      if (kw) q.set('keyword', kw);
       try {
-        const list = await api.get('/api/admin/tags');
-        document.getElementById('tbody').innerHTML = list.map(t => `
-      <tr>
-        <td>${t.id}</td>
-        <td><b># ${esc(t.name)}</b></td>
-        <td>${t.articleCount ?? 0}</td>
-        <td class="actions">
-          <button class="btn sm" onclick='edit(${JSON.stringify(t).replace(/'/g, "\\'")})'>编辑</button>
+        const d = await api.get('/api/admin/tags?' + q.toString());
+        currentTags = d.list || [];
+        document.getElementById('tag-total').textContent = d.total;
+
+        const grid = document.getElementById('tag-grid');
+        grid.innerHTML = currentTags.map(t => `
+      <div class="tag-card">
+        <div class="tag-idx">#${String(t.id).padStart(3, '0')}</div>
+        <div class="tag-name">${esc(t.name)}</div>
+        <div class="tag-count"><span class="badge ${t.articleCount ? 'green' : 'gray'}">${t.articleCount ?? 0} 篇文章</span></div>
+        <div class="tag-actions">
+          <button class="btn sm" onclick="editById(${t.id})">编辑</button>
           <button class="btn sm danger" onclick="del(${t.id})">删除</button>
-        </td>
-      </tr>`).join('') || '<tr><td colspan="4"><div class="empty">暂无标签</div></td></tr>';
+        </div>
+      </div>`).join('') || '<div class="empty" style="grid-column:1/-1;">暂无标签</div>';
+
+        renderPager(document.getElementById('pagination'), page, Math.max(1, Math.ceil(d.total / pageSize)), reload);
+        // 删除最后一页的唯一标签后，自动退回上一页，避免停留在空页码
+        if ((!d.list || d.list.length === 0) && page > 1 && d.total > 0) {
+          page--;
+          reload();
+          return;
+        }
       } catch (e) { toast(e.message, true); }
+    }
+
+    // 从当前页数据找标签回填（避免内联拼接转义问题）
+    function editById(id) {
+      const t = currentTags.find(x => x.id === id);
+      if (t) edit(t);
     }
 
     function openForm() {
@@ -84,7 +110,7 @@
 
     function edit(t) {
       editingId = t.id;
-      document.getElementById('form-title').textContent = '编辑标签 #' + t.id;
+      document.getElementById('form-title').textContent = '编辑标签 #' + String(t.id).padStart(3, '0');
       document.getElementById('t-id').value = t.id;
       document.getElementById('t-name').value = t.name;
       document.getElementById('form-modal').style.display = 'block';
@@ -113,7 +139,7 @@
       } catch (e) { toast(e.message, true); }
     }
 
-    reload();
+    reload(1);
   </script>
 </body>
 

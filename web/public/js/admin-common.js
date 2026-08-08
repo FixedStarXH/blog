@@ -29,7 +29,7 @@ function renderSidebar(active) {
   ];
   const admin = getAdmin();
   document.getElementById('sidebar').innerHTML = `
-    <div class="brand"><span class="tag">◎</span><span>BLOG·ADMIN</span></div>
+    <div class="brand"><span class="tag"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="2.5" y="2.5" width="19" height="19" rx="5" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.5" fill="#E53012"/></svg></span><span>BLOG·ADMIN</span></div>
     <nav class="nav">
       ${items.map(it => `
         <a href="${it.href}" class="${it.key === active ? 'active' : ''}">
@@ -68,6 +68,9 @@ function statusBadge(status) {
   switch (status) {
     case 1: return '<span class="badge green">已发布</span>';
     case 0: return '<span class="badge gray">草稿</span>';
+    case 2: return '<span class="badge orange">待审核</span>';
+    case 3: return '<span class="badge red">已驳回</span>';
+    case 4: return '<span class="badge blue">已排期</span>';
     default: return '<span class="badge gray">未知</span>';
   }
 }

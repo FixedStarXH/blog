@@ -14,7 +14,12 @@ async function initArticle() {
     return;
   }
   try {
-    article = await api.get('/api/articles/' + id);
+    // 文章本体 + 上一篇/下一篇/相关阅读（/nav 接口），并行请求一次渲染
+    const [detail, nav] = await Promise.all([
+      api.get('/api/articles/' + id),
+      api.get('/api/articles/' + id + '/nav').catch(() => null),
+    ]);
+    article = Object.assign({}, detail, nav || {});
     document.title = article.title + ' — LUMI';
     // SEO：动态注入 Open Graph / Twitter Card meta，让社交分享有标题、摘要、封面
     injectSEO(article);
@@ -123,7 +128,7 @@ function renderArticle() {
     return;
   }
 
-  const content = (a.hasPassword && sessionStorage.getItem('unlock_' + a.id) === '1')
+  const content = (a.needPassword && sessionStorage.getItem('unlock_' + a.id) === '1')
     ? sessionStorage.getItem('unlock_content_' + a.id) || a.content
     : a.content;
 
@@ -562,6 +567,7 @@ async function submitComment(e) {
     document.getElementById('c-content').value = '';
     replyParent = null;
     document.getElementById('c-content').placeholder = '写下你的评论…';
+    loadComments(); // 立即刷新评论列表（免审核，直接展示）
   } catch (err) {
     toast(err.message, true);
   }

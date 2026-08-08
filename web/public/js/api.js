@@ -52,6 +52,9 @@ const api = {
   del: (url) => request('DELETE', url),
 };
 
+// 挂到 window：React 组件(ESM)与页面内联脚本均通过 window.api 访问
+window.api = api;
+
 /* ---------- 格式化工具 ---------- */
 function fmtDate(iso) {
   if (!iso) return '—';

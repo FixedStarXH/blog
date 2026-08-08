@@ -14,6 +14,10 @@ docs/
 *.exe
 *.out
 
+# 前端 Vite 构建产物与依赖
+dist/
+web/node_modules/
+
 # IDE 文件
 .idea/
 .vscode/

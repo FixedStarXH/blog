@@ -36,6 +36,17 @@ func (s *TagService) GetAllTags() ([]model.Tag, error) {
 	return tags, nil
 }
 
+// GetAdminTags 后台标签分页列表（实时性要求高，不走缓存）
+func (s *TagService) GetAdminTags(keyword string, page, pageSize int) ([]model.Tag, int64, error) {
+	if pageSize <= 0 || pageSize > 100 {
+		pageSize = 12
+	}
+	if page <= 0 {
+		page = 1
+	}
+	return s.dao.FindPage(s.db, keyword, page, pageSize)
+}
+
 // CreateTag 新增标签：查重
 func (s *TagService) CreateTag(name string) error {
 	exist, err := s.dao.FindByName(s.db, name)

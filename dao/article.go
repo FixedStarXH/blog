@@ -324,14 +324,20 @@ func (d *ArticleDAO) FindRelated(db *gorm.DB, article *model.Article, limit int)
 	return related, err
 }
 
-// FindAll 后台文章管理：按状态筛选 + 分页（不校验作者，审核员可见所有投稿）
-func (d *ArticleDAO) FindAll(db *gorm.DB, status int, page, pageSize int) ([]model.Article, int64, error) {
+// FindAll 后台文章管理：按状态/关键词/分类筛选 + 分页（不校验作者，审核员可见所有投稿）
+func (d *ArticleDAO) FindAll(db *gorm.DB, status int, keyword string, categoryID uint, page, pageSize int) ([]model.Article, int64, error) {
 	var articles []model.Article
 	var total int64
 
 	query := db.Model(&model.Article{})
 	if status >= 0 {
 		query = query.Where("status = ?", status)
+	}
+	if keyword != "" {
+		query = query.Where("title LIKE ? OR content LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
+	}
+	if categoryID > 0 {
+		query = query.Where("category_id = ?", categoryID)
 	}
 	query.Count(&total)
 

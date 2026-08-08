@@ -7,7 +7,7 @@
   <title>RSS 订阅 — LUMI</title>
   <meta name="description" content="通过 RSS 订阅博客更新,不错过任何新文章。">
   <link rel="alternate" type="application/rss+xml" title="LUMI 博客" href="/api/rss.xml">
-  <link rel="stylesheet" href="css/style.css?v=15">
+  <link rel="stylesheet" href="css/style.css?v=17">
   <style>
     .rss-body {
       padding: 52px 0 80px;
@@ -209,8 +209,9 @@
 
   <footer class="footer" id="footer"></footer>
 
-  <script src="js/api.js?v=9"></script>
-  <script src="js/common.js?v=16"></script>
+  <script src="js/api.js?v=10"></script>
+  <script src="js/common.js?v=17"></script>
+  <script type="module" src="./src/main-public.jsx"></script>
   <script>
     function copyRssUrl() {
       const input = document.getElementById('rss-url');

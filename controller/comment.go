@@ -19,8 +19,9 @@ func NewCommentController(service *service.CommentService) *CommentController {
 
 // 发表评论请求体：昵称可选（免昵称），内容必填
 type addCommentRequest struct {
-	Nickname string `json:"nickname"`                    // 游客昵称，可选
-	Content  string `json:"content" binding:"required"`  // 评论内容，必填
+	Nickname string `json:"nickname"`                   // 游客昵称，可选
+	Content  string `json:"content" binding:"required"` // 评论内容，必填
+	ParentID *uint  `json:"parentId"`                   // 楼中楼：回复哪条评论，nil=顶级评论
 }
 
 // GetComments 文章评论列表
@@ -56,7 +57,7 @@ func (c *CommentController) AddComment(ctx *gin.Context) {
 		return
 	}
 
-	comment, err := c.service.AddComment(uint(id), req.Content, req.Nickname)
+	comment, err := c.service.AddComment(uint(id), req.Content, req.Nickname, req.ParentID)
 	if err != nil {
 		utils.Fail(ctx, "发表评论失败")
 		return

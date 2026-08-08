@@ -266,14 +266,14 @@ func (s *ArticleService) GetArticleNav(id uint) (*model.ArticleNav, error) {
 }
 
 // GetAdminArticles 后台文章列表（编辑+）
-func (s *ArticleService) GetAdminArticles(status, page, pageSize int) ([]model.Article, int64, error) {
+func (s *ArticleService) GetAdminArticles(status int, keyword string, categoryID uint, page, pageSize int) ([]model.Article, int64, error) {
 	if pageSize <= 0 || pageSize > 50 {
 		pageSize = 10
 	}
 	if page <= 0 {
 		page = 1
 	}
-	return s.dao.FindAll(s.db, status, page, pageSize)
+	return s.dao.FindAll(s.db, status, keyword, categoryID, page, pageSize)
 }
 
 // ApproveArticle 通过审核：先确认文章存在，

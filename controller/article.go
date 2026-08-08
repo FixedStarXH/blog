@@ -284,13 +284,15 @@ type rejectArticleRequest struct {
 }
 
 // GetAdminArticles 后台文章列表（编辑+）
-// GET /api/admin/articles?status=2&page=1&pageSize=10
+// GET /api/admin/articles?status=2&keyword=xx&categoryId=1&page=1&pageSize=10
 func (c *ArticleController) GetAdminArticles(ctx *gin.Context) {
 	status, _ := strconv.Atoi(ctx.DefaultQuery("status", "-1"))
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "10"))
+	keyword := ctx.Query("keyword")
+	categoryID, _ := strconv.ParseUint(ctx.DefaultQuery("categoryId", "0"), 10, 64)
 
-	articles, total, err := c.service.GetAdminArticles(status, page, pageSize)
+	articles, total, err := c.service.GetAdminArticles(status, keyword, uint(categoryID), page, pageSize)
 	if err != nil {
 		utils.Error(ctx, "获取文章列表失败")
 		return

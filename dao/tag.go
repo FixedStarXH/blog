@@ -40,6 +40,47 @@ func (d *TagDAO) FindAllWithCount(db *gorm.DB) ([]model.Tag, error) {
 	return tags, nil
 }
 
+// FindPage 后台标签管理：关键词模糊 + 分页（含每个标签的文章数，不走缓存）
+func (d *TagDAO) FindPage(db *gorm.DB, keyword string, page, pageSize int) ([]model.Tag, int64, error) {
+	var tags []model.Tag
+	var total int64
+
+	query := db.Model(&model.Tag{})
+	if keyword != "" {
+		query = query.Where("name LIKE ?", "%"+keyword+"%")
+	}
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	if err := query.Order("id asc").
+		Offset((page - 1) * pageSize).
+		Limit(pageSize).
+		Find(&tags).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var counts []struct {
+		TagID uint
+		Count int64
+	}
+	if err := db.Table("article_tags at").
+		Select("at.tag_id, COUNT(*) as count").
+		Joins("JOIN articles a ON a.id = at.article_id AND a.status = ?", model.ArticleStatusPublished).
+		Group("at.tag_id").
+		Scan(&counts).Error; err != nil {
+		return nil, 0, err
+	}
+	countMap := make(map[uint]int64, len(counts))
+	for _, c := range counts {
+		countMap[c.TagID] = c.Count
+	}
+	for i := range tags {
+		tags[i].ArticleCount = countMap[tags[i].ID]
+	}
+	return tags, total, nil
+}
+
 // FindByID 按 ID 查标签
 func (d *TagDAO) FindByID(db *gorm.DB, id uint) (*model.Tag, error) {
 	var t model.Tag

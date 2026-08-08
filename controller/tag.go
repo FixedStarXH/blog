@@ -28,6 +28,21 @@ func (c *TagController) GetTagList(ctx *gin.Context) {
 	utils.Success(ctx, tags)
 }
 
+// GetAdminTagList 后台标签管理（分页 + 关键词筛选）
+// GET /api/admin/tags?keyword=xx&page=1&pageSize=12
+func (c *TagController) GetAdminTagList(ctx *gin.Context) {
+	keyword := ctx.Query("keyword")
+	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "12"))
+
+	tags, total, err := c.service.GetAdminTags(keyword, page, pageSize)
+	if err != nil {
+		utils.Error(ctx, "获取标签列表失败")
+		return
+	}
+	utils.Success(ctx, gin.H{"list": tags, "total": total, "page": page, "pageSize": pageSize})
+}
+
 // 新增/修改标签：name 必填，最长 50 字
 type createTagRequest struct {
 	Name string `json:"name" binding:"required,max=50"`
