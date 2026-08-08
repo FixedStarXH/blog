@@ -1,6 +1,7 @@
 package service
 
 import (
+	"blog-system/cache"
 	"blog-system/dao"
 	"blog-system/model"
 	"errors"
@@ -19,7 +20,19 @@ func NewCategoryService(dao *dao.CategoryDAO, db *gorm.DB) *CategoryService {
 }
 
 func (s *CategoryService) GetAllCategories() ([]model.Category, error) {
-	return s.dao.FindAllWithCount(s.db)
+	// 分类列表 + 文章数：低频数据，缓存 5 分钟
+	var categories []model.Category
+	if cache.Get(cache.KeyCategories, &categories) {
+		return categories, nil
+	}
+	categories, err := s.dao.FindAllWithCount(s.db)
+	if err != nil {
+		return nil, err
+	}
+	if len(categories) > 0 {
+		cache.Set(cache.KeyCategories, categories, cache.TTLStatic)
+	}
+	return categories, nil
 }
 
 // CreateCategory 新增分类：先查重（Name 唯一），重复就拒绝
@@ -32,11 +45,15 @@ func (s *CategoryService) CreateCategory(name, description string, sort int) err
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
-	return s.dao.Create(s.db, &model.Category{
+	if err := s.dao.Create(s.db, &model.Category{
 		Name:        name,
 		Description: description,
 		Sort:        sort,
-	})
+	}); err != nil {
+		return err
+	}
+	cache.InvalidateTaxonomy()
+	return nil
 }
 
 // UpdateCategory 修改分类：先确认存在（GORM 的 Updates 查不到行不报错），
@@ -58,11 +75,15 @@ func (s *CategoryService) UpdateCategory(id uint, name, description string, sort
 			return err
 		}
 	}
-	return s.dao.Update(s.db, id, map[string]interface{}{
+	if err := s.dao.Update(s.db, id, map[string]interface{}{
 		"name":        name,
 		"description": description,
 		"sort":        sort,
-	})
+	}); err != nil {
+		return err
+	}
+	cache.InvalidateTaxonomy()
+	return nil
 }
 
 // DeleteCategory 删除分类：先确认存在，再查引用，有文章就拒绝
@@ -80,5 +101,9 @@ func (s *CategoryService) DeleteCategory(id uint) error {
 	if count > 0 {
 		return fmt.Errorf("该分类下还有 %d 篇文章，无法删除", count)
 	}
-	return s.dao.Delete(s.db, id)
+	if err := s.dao.Delete(s.db, id); err != nil {
+		return err
+	}
+	cache.InvalidateTaxonomy()
+	return nil
 }

@@ -141,6 +141,18 @@ img {
   color: var(--red);
 }
 
+.sidebar .user .to-blog {
+  display: block;
+  margin-top: 10px;
+  font-size: 12px;
+  color: rgba(246, 244, 240, .5);
+  text-decoration: none;
+}
+
+.sidebar .user .to-blog:hover {
+  color: var(--red);
+}
+
 /* 内容区 */
 .main {
   flex: 1;

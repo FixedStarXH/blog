@@ -1428,7 +1428,8 @@ body.dark .entry:hover .date {
 }
 
 .footer {
-  padding: 40px 0 48px;
+  /* 底部留足空间：避免右下角浮动回顶键遮挡页脚链接（如"后台"） */
+  padding: 40px 0 108px;
 }
 
 .footer .grid {
@@ -1918,6 +1919,146 @@ body.dark .entry:hover .date {
 
 .a-meta .share-link:hover {
   color: var(--red);
+}
+
+/* ============ 文章互动反馈动画（点赞/分享/数字跳动） ============ */
+/* 点赞爱心：默认空心，点赞后实心红 ❤ */
+.like-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+  color: var(--red);
+  transition: transform .18s ease;
+}
+
+.like-link:hover {
+  transform: scale(1.12);
+}
+
+.like-link .heart {
+  display: inline-block;
+  line-height: 1;
+}
+
+/* 爱心弹跳动画（重放：先移除再添加 .like-anim） */
+@keyframes likePop {
+  0% {
+    transform: scale(1);
+  }
+
+  30% {
+    transform: scale(1.5) rotate(-10deg);
+  }
+
+  60% {
+    transform: scale(.85) rotate(5deg);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+.like-link.like-anim .heart {
+  animation: likePop .5s ease;
+}
+
+/* 数字缩放动画（点赞数 / 阅读数共用） */
+@keyframes numBump {
+  0% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.55);
+    color: var(--red);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+.bump {
+  display: inline-block;
+  animation: numBump .45s ease;
+}
+
+/* 分享/打印按钮点击反馈 */
+@keyframes btnPop {
+  0% {
+    transform: scale(1);
+  }
+
+  40% {
+    transform: scale(1.12) rotate(-3deg);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+.pop {
+  display: inline-block;
+  animation: btnPop .4s ease;
+}
+
+/* ============ 交互按钮统一 hover 增强 ============ */
+/* 分享/打印：悬停轻微上浮 + 变红 */
+.a-meta .share-link {
+  display: inline-block;
+  transition: color .15s ease, transform .15s ease;
+}
+
+.a-meta .share-link:hover {
+  color: var(--red);
+  transform: translateY(-1px);
+}
+
+/* 文章标签：悬停上浮 + 红块投影 */
+.article-head .a-tags .tag:hover {
+  transform: translateY(-2px);
+  box-shadow: 2px 2px 0 var(--red);
+}
+
+/* TOC 目录：悬停红色并轻微右移，提示可跳转 */
+.toc a {
+  display: inline-block;
+  transition: color .15s ease, transform .15s ease;
+}
+
+.toc a:hover {
+  color: var(--red);
+  transform: translateX(3px);
+}
+
+/* 相关文章：悬停整体向右滑入 */
+.related .r-item {
+  transition: padding-left .18s ease;
+}
+
+.related .r-item:hover {
+  padding-left: 10px;
+}
+
+/* 评论提交按钮：悬停上浮 + 墨色块投影 */
+.comment-form .submit:hover {
+  background: var(--red);
+  transform: translateY(-2px);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+/* 回复按钮：悬停变红并右移 */
+.comment-item .c-reply-btn {
+  display: inline-block;
+  transition: color .15s ease, transform .15s ease;
+}
+
+.comment-item .c-reply-btn:hover {
+  color: var(--red);
+  transform: translateX(2px);
 }
 
 /* 代码块复制按钮：默认半透明，悬停才清晰 */

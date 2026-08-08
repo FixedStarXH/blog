@@ -11,7 +11,20 @@ var AppConfig *Config
 type Config struct {
 	Server ServerConfig `mapstructure:"server"`
 	MySQL  MySQLConfig  `mapstructure:"mysql"`
+	Redis  RedisConfig  `mapstructure:"redis"`
 	JWT    JWTConfig    `mapstructure:"jwt"`
+}
+
+type RedisConfig struct {
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	Password string `mapstructure:"password"`
+	DB       int    `mapstructure:"db"`
+}
+
+// Addr 返回 redis 连接地址 host:port
+func (r *RedisConfig) Addr() string {
+	return fmt.Sprintf("%s:%d", r.Host, r.Port)
 }
 
 type ServerConfig struct {

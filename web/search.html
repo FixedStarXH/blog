@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 
 <head>
@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>搜索 — LUMI</title>
   <meta name="description" content="搜索博客文章。">
-  <link rel="stylesheet" href="css/style.css?v=12">
+  <link rel="stylesheet" href="css/style.css?v=15">
 </head>
 
 <body>
@@ -42,7 +42,8 @@
       <!-- 搜索历史快捷入口（无结果或初始态显示） -->
       <div class="search-quick" id="search-quick" style="grid-column:1/13;">
         <div class="search-quick-section">
-          <div class="search-quick-title">最近搜索 <button class="search-hint-clear" onclick="clearSearchHistory();renderQuickHistory()">清空</button></div>
+          <div class="search-quick-title">最近搜索 <button class="search-hint-clear"
+              onclick="clearSearchHistory();renderQuickHistory()">清空</button></div>
           <div class="search-tags" id="quick-history"></div>
         </div>
       </div>
@@ -70,7 +71,7 @@
   <footer class="footer" id="footer"></footer>
 
   <script src="js/api.js?v=9"></script>
-  <script src="js/common.js?v=12"></script>
+  <script src="js/common.js?v=15"></script>
   <script>
     initPage('archive').then(initSearch);
 

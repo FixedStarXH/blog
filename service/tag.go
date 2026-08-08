@@ -1,6 +1,7 @@
 package service
 
 import (
+	"blog-system/cache"
 	"blog-system/dao"
 	"blog-system/model"
 	"errors"
@@ -20,7 +21,19 @@ func NewTagService(dao *dao.TagDAO, db *gorm.DB) *TagService {
 
 // GetAllTags 获取全部标签（含每个标签的文章数）
 func (s *TagService) GetAllTags() ([]model.Tag, error) {
-	return s.dao.FindAllWithCount(s.db)
+	// 标签墙数据：低频，缓存 5 分钟
+	var tags []model.Tag
+	if cache.Get(cache.KeyTags, &tags) {
+		return tags, nil
+	}
+	tags, err := s.dao.FindAllWithCount(s.db)
+	if err != nil {
+		return nil, err
+	}
+	if len(tags) > 0 {
+		cache.Set(cache.KeyTags, tags, cache.TTLStatic)
+	}
+	return tags, nil
 }
 
 // CreateTag 新增标签：查重
@@ -32,7 +45,11 @@ func (s *TagService) CreateTag(name string) error {
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
-	return s.dao.Create(s.db, &model.Tag{Name: name})
+	if err := s.dao.Create(s.db, &model.Tag{Name: name}); err != nil {
+		return err
+	}
+	cache.InvalidateTaxonomy()
+	return nil
 }
 
 // UpdateTag 修改标签：先确认存在（GORM 的 Updates 查不到行不报错），再查重（排除自己）
@@ -54,7 +71,11 @@ func (s *TagService) UpdateTag(id uint, name string) error {
 			return err
 		}
 	}
-	return s.dao.Update(s.db, id, map[string]interface{}{"name": name})
+	if err := s.dao.Update(s.db, id, map[string]interface{}{"name": name}); err != nil {
+		return err
+	}
+	cache.InvalidateTaxonomy()
+	return nil
 }
 
 // DeleteTag 删除标签：先确认存在，再清中间表 + 删标签
@@ -65,5 +86,9 @@ func (s *TagService) DeleteTag(id uint) error {
 		}
 		return err
 	}
-	return s.dao.Delete(s.db, id)
+	if err := s.dao.Delete(s.db, id); err != nil {
+		return err
+	}
+	cache.InvalidateTaxonomy()
+	return nil
 }

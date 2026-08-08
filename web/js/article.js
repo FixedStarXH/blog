@@ -24,7 +24,10 @@ async function initArticle() {
     api.put('/api/articles/' + id + '/view').then(d => {
       if (d && d.viewCount) {
         const el = document.getElementById('view-num');
-        if (el) el.textContent = fmtNum(d.viewCount);
+        if (el) {
+          el.textContent = fmtNum(d.viewCount);
+          pulse(el, 'bump'); // 数字跳动反馈
+        }
       }
     }).catch(() => { });
     loadComments();
@@ -137,7 +140,7 @@ function renderArticle() {
           <span>阅读 ${fmtMinutes(content)} 分钟</span><span class="sep">·</span>
           <span>${fmtNum(wordCount)} 字</span><span class="sep">·</span>
           <span><span id="view-num">${fmtNum(a.viewCount)}</span> 阅读</span><span class="sep">·</span>
-          <a href="javascript:;" onclick="doLike()" style="color:var(--red);">♡ <span id="like-num">${a.likeCount || 0}</span></a>
+          <a href="javascript:;" onclick="doLike()" class="like-link ${localStorage.getItem('liked_' + a.id) ? 'liked' : ''}" title="点赞"><span class="heart">${localStorage.getItem('liked_' + a.id) ? '❤' : '♡'}</span><span id="like-num">${a.likeCount || 0}</span></a>
           <span class="sep">·</span>
           <a href="javascript:;" onclick="shareArticle()" class="share-link" title="分享文章">↗ 分享</a>
           <span class="sep">·</span>
@@ -369,6 +372,14 @@ function initKeyboardNav() {
   });
 }
 
+// 触发一次"弹跳"动画（重复触发可重放）
+function pulse(el, cls) {
+  if (!el) return;
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+}
+
 // 分享文章：优先用 Web Share API（移动端原生分享），回退到复制链接
 async function shareArticle() {
   const url = location.href;
@@ -385,13 +396,14 @@ async function shareArticle() {
   try {
     await navigator.clipboard.writeText(url);
     toast('链接已复制到剪贴板');
+    pulse(document.querySelector('.share-link'), 'pop'); // 分享按钮反馈
   } catch (e) {
     // 老浏览器兜底：用临时 input + execCommand
     const tmp = document.createElement('input');
     tmp.value = url;
     document.body.appendChild(tmp);
     tmp.select();
-    try { document.execCommand('copy'); toast('链接已复制'); }
+    try { document.execCommand('copy'); toast('链接已复制'); pulse(document.querySelector('.share-link'), 'pop'); }
     catch (err) { toast('复制失败，请手动复制地址栏链接', true); }
     document.body.removeChild(tmp);
   }
@@ -410,12 +422,29 @@ async function tryUnlock() {
   }
 }
 
-// 点赞
+// 点赞/取消点赞：爱心实心⇄空心切换 + 弹跳动画 + 数字缩放（本地记住已赞状态）
 async function doLike() {
   try {
     const data = await api.put('/api/articles/' + id + '/like');
-    document.getElementById('like-num').textContent = data.likeCount;
-    toast(data.already ? '已经点过赞啦 ♡' : '点赞成功');
+    const num = document.getElementById('like-num');
+    num.textContent = data.likeCount;
+    const link = document.querySelector('.like-link');
+    const heart = link.querySelector('.heart');
+    if (data.already) {
+      // 原来已赞 → 本次是取消：空心 + 移除已赞样式
+      if (heart) heart.textContent = '♡';
+      link.classList.remove('liked');
+      localStorage.removeItem('liked_' + id);
+      toast('已取消点赞 ♡');
+    } else {
+      // 未赞 → 本次是点赞：实心红心
+      if (heart) heart.textContent = '❤';
+      link.classList.add('liked');
+      localStorage.setItem('liked_' + id, '1');
+      toast('点赞成功 ❤');
+    }
+    pulse(link, 'like-anim'); // 爱心弹跳
+    pulse(num, 'bump');       // 数字缩放
   } catch (e) { toast(e.message, true); }
 }
 

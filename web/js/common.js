@@ -506,6 +506,6 @@ function loadBgFlow() {
   if (document.getElementById('bg-flow-script')) return;
   const s = document.createElement('script');
   s.id = 'bg-flow-script';
-  s.src = 'js/bg-flow.js?v=2';
+  s.src = 'js/bg-flow.js?v=5';
   document.body.appendChild(s);
 }

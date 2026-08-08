@@ -160,6 +160,13 @@ func (d *ArticleDAO) AddView(db *gorm.DB, articleID uint, ip string) (int64, err
 	return v, nil
 }
 
+// AddViewDelta 浏览量增量刷库（Redis 定时任务调用）：view_count = view_count + delta
+func (d *ArticleDAO) AddViewDelta(db *gorm.DB, articleID uint, delta int64) error {
+	return db.Model(&model.Article{}).
+		Where("id = ?", articleID).
+		UpdateColumn("view_count", gorm.Expr("view_count + ?", delta)).Error
+}
+
 // LikeResult 点赞结果：新点赞数 + 是否当前用户已点赞
 type LikeResult struct {
 	LikeCount int64 `json:"likeCount"`

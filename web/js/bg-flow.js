@@ -33,7 +33,7 @@
     attractDist: 140,    // 吸附半径
     attractForce: 0.015, // 吸附力系数
     speed: 0.3,          // 自由流动基础速度
-    maxSpeed: 0.6,       // 吸附后最大速度
+    maxSpeed: 0.9,       // 吸附后最大速度（需能跟上锚点绕动）
   };
 
   function lineColor() {
@@ -81,15 +81,34 @@
     // 更新粒子
     for (let i = 0; i < particles.length; i++) {
       const p = particles[i];
-      const dx = p.x - mouse.x;
-      const dy = p.y - mouse.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      // 粒子到鼠标的距离：只用于判断是否进入吸附范围
+      const mdx = p.x - mouse.x;
+      const mdy = p.y - mouse.y;
+      const distToMouse = Math.sqrt(mdx * mdx + mdy * mdy);
 
-      if (slow && dist < CFG.attractDist) {
-        // 吸附模式：粒子被拽向鼠标
-        const force = (1 - dist / CFG.attractDist) * CFG.attractForce * (1 - mouse.speed / 8);
-        p.vx -= (dx / dist) * force * 2 + (Math.random() - 0.5) * 0.02;
-        p.vy -= (dy / dist) * force * 2 + (Math.random() - 0.5) * 0.02;
+      if (slow && distToMouse < CFG.attractDist) {
+        // 进入吸附时，给粒子分配一个鼠标周围的轨道锚点（半径 14~62px、任意角度）
+        // 锚点会绕鼠标持续转动 → 粒子被拽着沿轨道游走，保持多边形团状且一直运动
+        if (!p.attached) {
+          p.anchorR = 14 + Math.random() * 48;
+          p.anchorA = Math.random() * Math.PI * 2;
+          p.orbitDir = Math.random() < 0.5 ? 1 : -1;          // 旋转方向
+          p.orbitSpeed = 0.004 + Math.random() * 0.006;        // 角速度(rad/frame)，慢速游走
+        }
+        // 锚点角度随时间推进（绕鼠标公转）
+        p.anchorA += p.orbitDir * p.orbitSpeed;
+        // 目标点 = 鼠标位置 + 轨道锚点偏移（团状跟随鼠标并持续运动）
+        const tx = mouse.x + Math.cos(p.anchorA) * p.anchorR;
+        const ty = mouse.y + Math.sin(p.anchorA) * p.anchorR;
+        const adx = p.x - tx;
+        const ady = p.y - ty;
+        const adist = Math.sqrt(adx * adx + ady * ady);
+        if (adist > 3) {
+          // 吸附模式：粒子被拽向自己的锚点（而非鼠标点）
+          const force = (1 - adist / CFG.attractDist) * CFG.attractForce * (1 - mouse.speed / 8);
+          p.vx -= (adx / adist) * force * 2 + (Math.random() - 0.5) * 0.02;
+          p.vy -= (ady / adist) * force * 2 + (Math.random() - 0.5) * 0.02;
+        }
         // 阻尼
         p.vx *= 0.98;
         p.vy *= 0.98;
