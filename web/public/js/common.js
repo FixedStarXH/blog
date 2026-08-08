@@ -157,11 +157,68 @@ async function initPage(activeName) {
   renderQuote();
   renderSiteInfo();
   renderBackToTop();
+  initScrollProgress();
+  initRipple();
   // 后台页面是独立布局，不在 topbar 体系内，跳过懒加载
   if (!location.pathname.includes('/admin/')) {
     initLazyImages();
     loadBgFlow(); // 前台页面才启用流动线条背景
   }
+}
+
+// ============ 界面交互效果（按 ui-interaction-effects.md 精选） ============
+
+// 滚动进度条：文章页复用已有 #reading-progress，其他页面动态创建顶部红线
+function initScrollProgress() {
+  if (window.__progressInited) return;
+  window.__progressInited = true;
+  let bar = document.getElementById('reading-progress');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.className = 'scroll-progress';
+    bar.id = 'reading-progress';
+    document.body.appendChild(bar);
+  }
+  const update = () => {
+    const h = document.documentElement;
+    const total = h.scrollHeight - h.clientHeight;
+    bar.style.width = (total > 0 ? (h.scrollTop / total) * 100 : 0) + '%';
+  };
+  window.addEventListener('scroll', update, { passive: true });
+  window.addEventListener('resize', update);
+  update();
+}
+
+// 点击涟漪：事件委托，按钮首次点击时附加 .ripple-btn（overflow hidden）
+function initRipple() {
+  if (window.__rippleInited) return;
+  window.__rippleInited = true;
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn, .btn-shine, .auth-btn, button');
+    if (!btn) return;
+    if (!btn.classList.contains('ripple-btn')) btn.classList.add('ripple-btn');
+    const rect = btn.getBoundingClientRect();
+    const r = document.createElement('span');
+    r.className = 'ripple';
+    r.style.left = (e.clientX - rect.left) + 'px';
+    r.style.top = (e.clientY - rect.top) + 'px';
+    btn.appendChild(r);
+    setTimeout(() => r.remove(), 750);
+  });
+}
+
+// 列表条目骨架：生成 n 行 .skel-entry（对应目录表的序号/标题/分类/日期）
+function skelEntries(n) {
+  let html = '';
+  for (let i = 0; i < n; i++) {
+    html += '<div class="skel-entry">' +
+      '<div class="skeleton s-num"></div>' +
+      '<div class="skeleton s-title"></div>' +
+      '<div class="skeleton s-cat"></div>' +
+      '<div class="skeleton s-date"></div>' +
+      '</div>';
+  }
+  return html;
 }
 // ============================================================
 // 图片灯箱：点击文章内图片放大查看

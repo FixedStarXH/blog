@@ -5,6 +5,16 @@
 initPage('home').then(loadHome);
 
 async function loadHome() {
+  // 骨架占位：分类索引 + 最新文章先显示加载骨架（替换转圈）
+  const catList = document.getElementById('cat-list');
+  if (catList && !catList.childElementCount) {
+    catList.innerHTML = Array.from({ length: 4 }).map(() =>
+      '<div class="skel-cat"><div class="skeleton s-name"></div><div class="skeleton s-cnt"></div></div>'
+    ).join('');
+  }
+  const dirList = document.getElementById('dir-list');
+  if (dirList && !dirList.childElementCount) dirList.innerHTML = skelEntries(6);
+  bindFeatureSpot();
   try {
     // 站点统计
     const site = await api.get('/api/site');
@@ -95,6 +105,18 @@ function renderDir(list, total) {
       <span class="date">${fmtDate(a.createdAt)}<span class="views">${fmtNum(a.viewCount)} views</span></span>
     </a>
   `).join('');
+}
+
+// 头条精选区光标聚光：鼠标坐标写入 CSS 变量，光斑跟随（.feature::before）
+function bindFeatureSpot() {
+  const spot = document.querySelector('.feature');
+  if (!spot || spot.dataset.spotBound) return;
+  spot.dataset.spotBound = '1';
+  spot.addEventListener('pointermove', (e) => {
+    const rect = spot.getBoundingClientRect();
+    spot.style.setProperty('--x', (e.clientX - rect.left) + 'px');
+    spot.style.setProperty('--y', (e.clientY - rect.top) + 'px');
+  });
 }
 
 // 滚动字幕：技术栈关键词跑马灯，· 分隔，两份内容无缝循环

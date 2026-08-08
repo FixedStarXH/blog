@@ -161,7 +161,7 @@ async function loadCats(categoryId) {
 
 async function loadArticles() {
   const wrap = document.getElementById('dir-list');
-  wrap.innerHTML = '<div class="loading" style="grid-column:1/13">加载中…</div>';
+  wrap.innerHTML = skelEntries(10); // 骨架占位，替换转圈 loading
   try {
     const p = new URLSearchParams(location.search);
     p.set('page', curPage);

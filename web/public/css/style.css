@@ -172,6 +172,26 @@ body.dark .topbar {
   gap: 6px;
   align-items: baseline;
   transition: color .12s ease;
+  position: relative;
+}
+
+/* 悬停下划线：从左侧滑出（A 组交互效果） */
+.nav a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -5px;
+  width: 100%;
+  height: 2px;
+  background: var(--red);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform .32s cubic-bezier(.22, 1, .36, 1);
+}
+
+.nav a:hover::after,
+.nav a.active::after {
+  transform: scaleX(1);
 }
 
 .nav a i {
@@ -589,19 +609,20 @@ body.dark .marquee {
   transform: scaleX(1);
 }
 
-.cat:nth-child(1) {
+/* 分类下划线颜色：4 个一组循环，任意数量分类都有色条（原规则只覆盖前 4 个） */
+.cat:nth-child(4n+1) {
   --cat-bar: var(--red);
 }
 
-.cat:nth-child(2) {
+.cat:nth-child(4n+2) {
   --cat-bar: var(--ink);
 }
 
-.cat:nth-child(3) {
+.cat:nth-child(4n+3) {
   --cat-bar: var(--gray-6);
 }
 
-.cat:nth-child(4) {
+.cat:nth-child(4n) {
   --cat-bar: var(--red);
 }
 
@@ -1057,12 +1078,15 @@ body.dark .entry:hover .date {
   border-style: solid;
   border-color: var(--ink);
   background: var(--white);
-  transition: all .2s cubic-bezier(.4, 0, .2, 1);
+  transition: transform .2s cubic-bezier(.4, 0, .2, 1), box-shadow .2s ease, background .2s ease, color .2s ease, border-color .2s ease;
+  /* 每个标签默认带独立方向（--rot 由 JS 随机写入） */
+  transform: rotate(var(--rot, 0deg));
 }
 
+/* 悬停：磁吸偏移(--mx/--my) + 保持自身方向 + 阴影方向随机(--shx/--shy) */
 .tag-clickable:hover {
-  transform: translateY(-4px) rotate(-2deg) scale(1.06);
-  box-shadow: 4px 4px 0 var(--tag-border);
+  transform: translate(var(--mx, 0px), calc(var(--my, 0px) - 4px)) rotate(var(--rot, 0deg)) scale(1.06);
+  box-shadow: var(--shx, 4px) var(--shy, 4px) 0 var(--tag-border);
   background: var(--tag-bg);
   border-color: var(--tag-border);
   color: var(--tag-text);
@@ -1073,17 +1097,12 @@ body.dark .entry:hover .date {
   opacity: .7;
 }
 
-/* 偶数项 hover 反向旋转，错落感更强（跟技术栈 chips 一致） */
-.tag-clickable:nth-child(even):hover {
-  transform: translateY(-4px) rotate(2deg) scale(1.06);
-}
-
 /* 选中态 */
 .tag-clickable.active {
   background: var(--tag-border) !important;
   border-color: var(--tag-border) !important;
   color: #fff !important;
-  transform: translateY(-2px);
+  transform: rotate(var(--rot, 0deg)) translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, .15);
 }
 
@@ -1106,6 +1125,86 @@ body.dark .entry:hover .date {
 .tag-item:hover .n {
   color: var(--ink);
   opacity: .6;
+}
+
+/* 标签墙「清除筛选」：卡片堆叠，默认顶部只显示 ✕，悬停扇形展开露出「清除筛选」卡片 */
+.tag-clear-stack {
+  position: relative;
+  width: 136px;
+  height: 52px;
+  margin: 44px auto 0;
+}
+
+.tag-clear-stack .tcs-top,
+.tag-clear-stack .tcs-mid,
+.tag-clear-stack .tcs-back {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 136px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  font-weight: 800;
+  transition: transform .3s cubic-bezier(.34, 1.56, .64, 1), opacity .2s ease;
+  user-select: none;
+}
+
+/* 顶层 ✕（墨黑实心卡，默认在最上） */
+.tag-clear-stack .tcs-top {
+  z-index: 3;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 17px;
+  transform: translate(4px, -4px) rotate(3deg);
+  box-shadow: 4px 4px 0 var(--gray-a);
+  cursor: pointer;
+}
+
+/* 中间层：青边浅色卡（低饱和，默认露左缘） */
+.tag-clear-stack .tcs-mid {
+  z-index: 2;
+  background: var(--paper-2);
+  border-color: var(--teal);
+  transform: translate(-9px, 3px) rotate(-5deg);
+}
+
+/* 底层：写「清除筛选」的卡片，默认被盖住，悬停展开后露出可点击 */
+.tag-clear-stack .tcs-back {
+  z-index: 1;
+  background: var(--white);
+  color: var(--ink);
+  font-size: 13px;
+  letter-spacing: .06em;
+  transform: translate(6px, 7px) rotate(2deg);
+  pointer-events: none;
+  cursor: pointer;
+  border-width: 2px;
+  outline: none;
+}
+
+.tag-clear-stack:hover .tcs-top {
+  transform: translate(52px, -26px) rotate(16deg);
+  opacity: .85;
+}
+
+.tag-clear-stack:hover .tcs-mid {
+  transform: translate(-56px, -14px) rotate(-18deg);
+  opacity: .9;
+}
+
+.tag-clear-stack:hover .tcs-back {
+  transform: translate(0, 0) rotate(0deg);
+  pointer-events: auto;
+  box-shadow: 6px 6px 0 var(--teal);
+}
+
+.tag-clear-stack:hover .tcs-back:hover {
+  background: var(--ink);
+  color: var(--paper);
 }
 
 /* 标签筛选结果 */
@@ -3048,16 +3147,16 @@ body.dark .skill-chip {
 
 /* 标签 chip：保留红色 hover，加旋转 + 缩放（技能芯片风格） */
 .tag-item {
-  transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+  transition: transform 0.18s ease, box-shadow 0.2s ease, background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
 }
 
+/* 磁吸 + 自身方向：与 .tag-clickable:hover 保持一致（此处声明靠后，必须同值避免覆盖） */
 .tag-item:hover {
-  transform: rotate(-2deg) scale(1.04);
+  transform: translate(var(--mx, 0px), calc(var(--my, 0px) - 4px)) rotate(var(--rot, -2deg)) scale(1.06);
 }
 
-/* 偶数项反向旋转，错落感更强 */
 .tag-item:nth-child(even):hover {
-  transform: rotate(2deg) scale(1.04);
+  transform: translate(var(--mx, 0px), calc(var(--my, 0px) - 4px)) rotate(var(--rot, 2deg)) scale(1.06);
 }
 
 /* 文章列表项：浮起 + 青色投影（保留标题右移效果） */
@@ -3104,6 +3203,202 @@ body.dark .skill-chip {
 .btn:active {
   transform: translate(1px, 1px);
   box-shadow: none;
+}
+
+/* ============================================================
+   界面交互效果（按 ui-interaction-effects.md 精选：进度条/下划线/扫光/涟漪/骨架屏/聚光）
+   ============================================================ */
+
+/* A1. 滚动进度条：顶部 3px 红线（文章页已有 #reading-progress，其他页面由 common.js 动态创建） */
+.scroll-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 0;
+  background: var(--red);
+  z-index: 9998;
+  transition: width .1s ease;
+  pointer-events: none;
+}
+
+/* B1. 扫光按钮 */
+.btn-shine {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-shine::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -80%;
+  width: 50%;
+  height: 100%;
+  transform: skewX(-20deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .5), transparent);
+  transition: left .5s ease;
+  pointer-events: none;
+}
+
+.btn-shine:hover::after {
+  left: 120%;
+}
+
+/* 登录/注册按钮自动扫光 */
+.auth-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-btn::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -80%;
+  width: 50%;
+  height: 100%;
+  transform: skewX(-20deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .5), transparent);
+  transition: left .5s ease;
+  pointer-events: none;
+}
+
+.auth-btn:hover::after {
+  left: 120%;
+}
+
+/* B2. 点击涟漪：.ripple-btn 由 JS 在首次点击时动态添加 */
+.ripple-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  background: rgba(255, 255, 255, .65);
+  transform: translate(-50%, -50%) scale(0);
+  animation: ripple .7s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes ripple {
+  to {
+    transform: translate(-50%, -50%) scale(18);
+    opacity: 0;
+  }
+}
+
+/* C. 骨架屏（加载占位，替换转圈 loading） */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--paper-2);
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .5), transparent);
+  animation: shimmer 1.4s ease infinite;
+}
+
+body.dark .skeleton::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .08), transparent);
+}
+
+@keyframes shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* 列表条目骨架（对应 .entry 四列：序号/标题/分类/日期） */
+.skel-entry {
+  display: grid;
+  grid-template-columns: 48px 1fr 160px 200px;
+  gap: 20px;
+  align-items: center;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.skel-entry .s-num {
+  width: 32px;
+  height: 12px;
+}
+
+.skel-entry .s-title {
+  height: 15px;
+  width: 70%;
+}
+
+.skel-entry .s-cat {
+  height: 11px;
+  width: 70px;
+}
+
+.skel-entry .s-date {
+  height: 11px;
+  width: 120px;
+}
+
+/* 分类索引骨架 */
+.skel-cat {
+  grid-column: span 3;
+  padding: 22px 0;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skel-cat .s-name {
+  height: 20px;
+  width: 60%;
+}
+
+.skel-cat .s-cnt {
+  height: 11px;
+  width: 80px;
+}
+
+@media (max-width: 760px) {
+  .skel-entry {
+    grid-template-columns: 32px 1fr;
+  }
+
+  .skel-entry .s-cat,
+  .skel-entry .s-date {
+    display: none;
+  }
+}
+
+/* D. 光标聚光卡片：首页头条精选区，光斑跟随光标（深色模式尤其明显） */
+.feature {
+  position: relative;
+}
+
+.feature::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0;
+  pointer-events: none;
+  background: radial-gradient(420px circle at var(--x, 50%) var(--y, 50%),
+      rgba(229, 48, 18, .10), transparent 62%);
+  transition: opacity .35s ease;
+}
+
+.feature:hover::before {
+  opacity: 1;
 }
 
 /* 浮动按钮增强 hover */

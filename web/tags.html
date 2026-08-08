@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>标签墙 — LUMI</title>
   <meta name="description" content="全部标签，按标签浏览文章。">
-  <link rel="stylesheet" href="css/style.css?v=17">
+  <link rel="stylesheet" href="css/style.css?v=21">
 </head>
 
 <body>
@@ -25,10 +25,15 @@
     <div class="grid">
       <div class="tag-wall-hint" id="tag-hint"
         style="grid-column:1/13;text-align:center;font-size:12px;color:var(--gray-a);margin-bottom:12px;">
-        点击标签多选筛选文章（已选：<b id="tag-sel-count">0</b>）&nbsp;&nbsp;·&nbsp;&nbsp;<a href="javascript:;"
-          onclick="clearTagFilter()" style="color:var(--red);">清除筛选</a></div>
+        点击标签多选筛选文章（已选：<b id="tag-sel-count">0</b>）</div>
       <div class="loading" id="tag-loading" style="grid-column:1/13">加载中…</div>
       <div class="wrap" id="tag-wrap" style="display:none;"></div>
+      <!-- 清除筛选：卡片堆叠，默认显示 ✕，悬停展开露出「清除筛选」卡片 -->
+      <div class="tag-clear-stack" id="tag-clear-stack" style="grid-column:1/13;" title="清除筛选">
+        <button type="button" class="tcs-back" onclick="clearTagFilter()">清除筛选 ✕</button>
+        <span class="tcs-mid"></span>
+        <span class="tcs-top">✕</span>
+      </div>
     </div>
   </section>
 
@@ -46,7 +51,7 @@
   <footer class="footer" id="footer"></footer>
 
   <script src="js/api.js?v=10"></script>
-  <script src="js/common.js?v=17"></script>
+  <script src="js/common.js?v=18"></script>
   <script type="module" src="./src/main-public.jsx"></script>
   <!-- v2: 强化多选、科技栈风格hover -->
   <script>
@@ -115,12 +120,17 @@
           var c = t.articleCount || 0;
           var size = sizeFor(c);
           var col = getTagColor(i);
+          // 每个标签独立方向（-2.5° ~ 2.5°）与阴影方向（-4px ~ 4px 双向）
+          var rot = (Math.random() * 5 - 2.5).toFixed(1);
+          var shx = Math.floor(Math.random() * 9) - 4;
+          var shy = Math.floor(Math.random() * 9) - 4;
           return '<span class="tag-item tag-clickable" data-tag="' + esc(t.name) +
-            '" style="font-size:' + size + 'px;--tag-bg:' + col.bg + ';--tag-border:' + col.border + ';--tag-text:' + col.text + ';">' +
+            '" style="font-size:' + size + 'px;--tag-bg:' + col.bg + ';--tag-border:' + col.border + ';--tag-text:' + col.text +
+            ';--rot:' + rot + 'deg;--shx:' + shx + 'px;--shy:' + shy + 'px;">' +
             esc(t.name) + ' <span class="n" style="font-family:var(--mono);font-size:' + Math.max(10, size - 3) + 'px;">' + c + '</span></span>';
         }).join('');
 
-        // 给每个标签绑定点击事件
+        // 给每个标签绑定点击事件 + 磁吸效果（光标靠近时标签跟随偏移，松手回弹）
         var items = wrap.querySelectorAll('.tag-clickable');
         console.log('[tags] 绑定了 ' + items.length + ' 个标签点击事件');
         items.forEach(function (el) {
@@ -136,6 +146,18 @@
             }
             updateTagUI();
             filterByTags();
+          });
+          // 磁吸：按光标相对中心偏移写入 --mx/--my，CSS hover transform 组合使用
+          el.addEventListener('pointermove', function (e) {
+            var r = el.getBoundingClientRect();
+            var dx = e.clientX - (r.left + r.width / 2);
+            var dy = e.clientY - (r.top + r.height / 2);
+            el.style.setProperty('--mx', Math.max(-12, Math.min(12, dx * 0.28)).toFixed(1) + 'px');
+            el.style.setProperty('--my', Math.max(-10, Math.min(10, dy * 0.28)).toFixed(1) + 'px');
+          });
+          el.addEventListener('pointerleave', function () {
+            el.style.setProperty('--mx', '0px');
+            el.style.setProperty('--my', '0px');
           });
         });
       } catch (e) {

@@ -9,6 +9,7 @@ logs/
 
 # 本地设计文档（不上传，仅本地使用）
 docs/
+ui-interaction-effects.md
 
 # 编译产物
 *.exe

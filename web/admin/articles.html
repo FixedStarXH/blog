@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>文章管理 — 后台</title>
-  <link rel="stylesheet" href="../css/admin.css?v=10">
+  <link rel="stylesheet" href="../css/admin.css?v=11">
 </head>
 
 <body>
@@ -133,7 +133,7 @@
   </div>
 
   <script src="../js/api.js?v=7"></script>
-  <script src="../js/admin-common.js?v=9"></script>
+  <script src="../js/admin-common.js?v=10"></script>
   <script>
     initAdmin('articles');
 
@@ -217,8 +217,9 @@
       if (status !== '-1') q.set('status', status);
       if (cat) q.set('categoryId', cat);
       try {
-        const d = await api.get('/api/admin/articles?' + q.toString());
         const body = document.getElementById('tbody');
+        body.innerHTML = skeletonRows(10, 9); // 表格骨架占位
+        const d = await api.get('/api/admin/articles?' + q.toString());
         body.innerHTML = (d.list || []).map(a => `
       <tr>
         <td><input type="checkbox" class="row-check" data-id="${a.id}" onchange="toggleRow(${a.id}, this.checked)"></td>

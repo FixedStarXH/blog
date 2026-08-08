@@ -797,6 +797,78 @@ table.data .actions {
   accent-color: var(--red);
 }
 
+/* ============ 界面交互效果 ============ */
+/* 主按钮扫光 */
+.btn.primary {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn.primary::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -80%;
+  width: 50%;
+  height: 100%;
+  transform: skewX(-20deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .35), transparent);
+  transition: left .5s ease;
+  pointer-events: none;
+}
+
+.btn.primary:hover::after {
+  left: 120%;
+}
+
+/* 点击涟漪：.ripple-btn 由 JS 首次点击时动态添加 */
+.ripple-btn {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  background: rgba(255, 255, 255, .55);
+  transform: translate(-50%, -50%) scale(0);
+  animation: ripple .7s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes ripple {
+  to {
+    transform: translate(-50%, -50%) scale(18);
+    opacity: 0;
+  }
+}
+
+/* 表格骨架行（加载占位） */
+.skel-line {
+  height: 12px;
+  border-radius: 4px;
+  background: var(--paper-2);
+  position: relative;
+  overflow: hidden;
+}
+
+.skel-line::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .5), transparent);
+  animation: shimmer 1.4s ease infinite;
+}
+
+@keyframes shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
 /* ============ 标签管理：卡片网格 ============ */
 .toolbar-total {
   font-size: 12px;

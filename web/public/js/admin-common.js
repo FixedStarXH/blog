@@ -87,4 +87,34 @@ function commentStatusBadge(status) {
 function initAdmin(active) {
   requireAuth();
   renderSidebar(active);
+  initRipple();
+}
+
+// 点击涟漪：后台按钮事件委托（与前台效果一致）
+function initRipple() {
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn');
+    if (!btn) return;
+    if (!btn.classList.contains('ripple-btn')) btn.classList.add('ripple-btn');
+    const rect = btn.getBoundingClientRect();
+    const r = document.createElement('span');
+    r.className = 'ripple';
+    r.style.left = (e.clientX - rect.left) + 'px';
+    r.style.top = (e.clientY - rect.top) + 'px';
+    btn.appendChild(r);
+    setTimeout(() => r.remove(), 750);
+  });
+}
+
+// 表格骨架行：生成 n 行占位（用于后台列表加载）
+function skeletonRows(n, cols = 9) {
+  let rows = '';
+  for (let i = 0; i < n; i++) {
+    let tds = '';
+    for (let j = 0; j < cols; j++) {
+      tds += '<td class="skel-cell"><div class="skel-line" style="width:' + (45 + ((i * 13 + j * 7) % 40)) + '%"></div></td>';
+    }
+    rows += '<tr>' + tds + '</tr>';
+  }
+  return rows;
 }
