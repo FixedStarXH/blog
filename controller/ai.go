@@ -167,18 +167,41 @@ func (c *AIController) IndexStatus(ctx *gin.Context) {
 	})
 }
 
-// Ask 智能问答（前台公开接口，SSE 流式）
-// POST /api/ai/ask  Body: {"question":"...", "articleId": 可选(限定单篇文章)}
+// Ask 智能问答（前台公开接口，SSE 流式，支持多轮上下文）
+// POST /api/ai/ask  Body: {"question":"...", "articleId": 可选(限定单篇文章), "history": [{"role":"user|assistant","content":"..."}]}
 func (c *AIController) Ask(ctx *gin.Context) {
 	var req struct {
-		Question  string `json:"question" binding:"required"`
-		ArticleID *uint  `json:"articleId"`
+		Question  string             `json:"question" binding:"required"`
+		ArticleID *uint              `json:"articleId"`
+		History   []service.ChatMessage `json:"history"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		utils.Fail(ctx, "参数错误：问题不能为空")
 		return
 	}
-	body, err := c.svc.AskStream(ctx.Request.Context(), req.Question, req.ArticleID)
+	// 历史消息安全校验：只收 user/assistant、限 8 条、每条 ≤ 500 字、总数 ≤ 2000 字
+	// （防注入 system 角色、防超长 history 刷 token）
+	history := make([]service.ChatMessage, 0, len(req.History))
+	total := 0
+	for _, m := range req.History {
+		role := strings.ToLower(strings.TrimSpace(m.Role))
+		if role != "user" && role != "assistant" {
+			continue
+		}
+		content := strings.TrimSpace(m.Content)
+		if content == "" || len([]rune(content)) > 500 {
+			continue
+		}
+		total += len([]rune(content))
+		if total > 2000 {
+			break
+		}
+		if len(history) >= 8 {
+			break
+		}
+		history = append(history, service.ChatMessage{Role: role, Content: content})
+	}
+	body, err := c.svc.AskStream(ctx.Request.Context(), req.Question, req.ArticleID, history)
 	if err != nil {
 		utils.Fail(ctx, err.Error())
 		return

@@ -2535,7 +2535,7 @@ body.dark .entry:hover .date {
    ============================================================ */
 .search-trigger {
   background: none;
-  border: 1px solid var(--ink);
+  border: none;
   color: var(--ink);
   width: 32px;
   height: 32px;
@@ -2544,13 +2544,12 @@ body.dark .entry:hover .date {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background .15s ease, color .15s ease;
+  transition: color .15s ease;
   line-height: 1;
 }
 
 .search-trigger:hover {
-  background: var(--ink);
-  color: var(--paper);
+  color: var(--red);
 }
 
 /* 搜索弹层遮罩 */

@@ -224,8 +224,10 @@ func (s *AIService) search(ctx context.Context, qVec []float32, articleID *uint,
 //
 // articleID 非 nil 时只在单篇文章内检索（文章详情页"问这篇文章"）；
 // nil 时全站检索（全局 AI 助手）。
+// history 为多轮对话历史（controller 已校验 role/content/条数），插在问题之前，
+// 让模型能承接上文（"完整对话界面"的关键）。
 // 返回 SSE 响应体；AI 不可用/未索引时返回明确的业务错误（前端给提示）。
-func (s *AIService) AskStream(ctx context.Context, question string, articleID *uint) (*http.Response, error) {
+func (s *AIService) AskStream(ctx context.Context, question string, articleID *uint, history []ChatMessage) (*http.Response, error) {
 	question = strings.TrimSpace(question)
 	if question == "" {
 		return nil, fmt.Errorf("问题不能为空")
@@ -258,10 +260,13 @@ func (s *AIService) AskStream(ctx context.Context, question string, articleID *u
 	}
 	contextText := strings.Join(contextParts, "\n\n---\n\n")
 
-	messages := []chatMessage{
+	messages := []ChatMessage{
 		{Role: "system", Content: "你是「Lumi 博客」的 AI 助手。请基于提供的文章片段回答用户问题：\n1. 回答要有依据，优先引用片段内容；\n2. 片段不足时明确说'文章中没有相关内容'，不要编造；\n3. 用简洁的中文回答。"},
-		{Role: "user", Content: fmt.Sprintf("以下是相关文章片段：\n\n%s\n\n---\n\n用户问题：%s", contextText, question)},
 	}
-	// ④ 大模型流式回答（SSE）
+	// ④ 多轮历史（最多 8 条，controller 已限）插在问题之前，保证上下文连贯
+	messages = append(messages, history...)
+	messages = append(messages, ChatMessage{Role: "user", Content: fmt.Sprintf("以下是相关文章片段：\n\n%s\n\n---\n\n用户问题：%s", contextText, question)})
+
+	// ⑤ 大模型流式回答（SSE）
 	return s.chatCompletion(ctx, messages, 0.3, true)
 }

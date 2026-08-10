@@ -49,13 +49,14 @@ func (s *AIService) Enabled() bool {
 // 底层：OpenAI 兼容 HTTP 调用（chat 流式 / chat 非流式 / embedding）
 // ----------------------------------------------------------------------------
 
-type chatMessage struct {
+// ChatMessage 对话消息（导出：controller 构造多轮历史时使用）
+type ChatMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
 // chatCompletion 通用 chat 调用。stream=true 时返回响应体（调用方负责逐行读 SSE 并 Close）。
-func (s *AIService) chatCompletion(ctx context.Context, messages []chatMessage, temperature float64, stream bool) (*http.Response, error) {
+func (s *AIService) chatCompletion(ctx context.Context, messages []ChatMessage, temperature float64, stream bool) (*http.Response, error) {
 	cfg := config.AppConfig.AI
 	payload, err := json.Marshal(map[string]interface{}{
 		"model":       cfg.ChatModel,
@@ -87,7 +88,7 @@ func (s *AIService) chatCompletion(ctx context.Context, messages []chatMessage, 
 }
 
 // chat 非流式对话，返回模型完整回答（摘要等短输出场景用）
-func (s *AIService) chat(ctx context.Context, messages []chatMessage, temperature float64) (string, error) {
+func (s *AIService) chat(ctx context.Context, messages []ChatMessage, temperature float64) (string, error) {
 	resp, err := s.chatCompletion(ctx, messages, temperature, false)
 	if err != nil {
 		return "", err
@@ -168,7 +169,7 @@ func (s *AIService) GenerateSummary(ctx context.Context, content string) (string
 	if !s.Enabled() {
 		return fallbackSummary(text), nil
 	}
-	messages := []chatMessage{
+	messages := []ChatMessage{
 		{Role: "system", Content: "你是一位技术博客编辑。请为文章写一段摘要：50-100字，客观、简洁、准确概括核心内容。直接输出摘要文本，不要加引号、不要加'摘要：'前缀。"},
 		{Role: "user", Content: "请为以下文章生成摘要：\n\n" + text},
 	}
@@ -195,7 +196,7 @@ func (s *AIService) PolishStream(ctx context.Context, content string) (*http.Res
 		return nil, errors.New("AI 功能未配置：请在 config.yaml 设置 ai.api_key 后重启")
 	}
 	text := truncateRunes(stripHTML(content), 3000)
-	messages := []chatMessage{
+	messages := []ChatMessage{
 		{Role: "system", Content: "你是一位资深技术文章编辑。对用户提供的文章内容进行润色：修正错别字、语病，让表达更简洁、专业、通顺；保持原有技术信息与结构不变。只输出润色后的内容，不要任何解释或前缀。"},
 		{Role: "user", Content: text},
 	}
