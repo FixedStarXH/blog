@@ -174,7 +174,10 @@ func (d *ArticleDAO) Delete(db *gorm.DB, id, authorID uint) error {
 // 后到的请求在锁内重新查明细，发现已有记录就不再计数。
 // 注意：这是 Redis 缓存不可用时的降级路径，流量低，悲观锁开销可忽略。
 func (d *ArticleDAO) AddView(db *gorm.DB, articleID uint, ip string) (int64, error) {
-	startOfDay := time.Now().Truncate(24 * time.Hour)
+	// 当天零点：不能用 time.Now().Truncate(24*time.Hour)——
+	// 它按 UTC 对齐，在 +08 时区会截到本地 08:00，导致 0:00-8:00 的访问漏判去重。
+	now := time.Now()
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	var current int64
 
 	err := db.Transaction(func(tx *gorm.DB) error {
@@ -202,7 +205,7 @@ func (d *ArticleDAO) AddView(db *gorm.DB, articleID uint, ip string) (int64, err
 		if err := tx.Create(&model.ArticleView{
 			ArticleID: articleID,
 			IP:        ip,
-			ViewedAt:  time.Now(),
+			ViewedAt:  now,
 		}).Error; err != nil {
 			return err
 		}
@@ -249,9 +252,10 @@ func (d *ArticleDAO) Like(db *gorm.DB, articleID uint, ip string) (*LikeResult, 
 	}
 	if res.RowsAffected > 0 {
 		// 确实取消了一行 → 减计数（带下限，防并发下多减成负数）
+		// 用 CASE WHEN 而非 GREATEST：语义一致，且 SQLite（测试库）不支持 GREATEST
 		if err := db.Model(&model.Article{}).
 			Where("id = ?", articleID).
-			UpdateColumn("like_count", gorm.Expr("GREATEST(like_count - 1, 0)")).Error; err != nil {
+			UpdateColumn("like_count", gorm.Expr("CASE WHEN like_count > 0 THEN like_count - 1 ELSE 0 END")).Error; err != nil {
 			return nil, err
 		}
 		var v int64
