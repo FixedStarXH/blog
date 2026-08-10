@@ -170,6 +170,10 @@ func (s *AIService) GenerateSummary(ctx context.Context, content string) (string
 	if !s.Enabled() {
 		return fallbackSummary(text), nil
 	}
+	// 成本控制：真正调用上游前消费每日额度（摘要/润色/问答共用，防刷接口烧 token）
+	if ok, _ := s.ConsumeAIQuota(); !ok {
+		return "", errors.New("今日 AI 调用次数已达上限，明天再来吧")
+	}
 	messages := []ChatMessage{
 		{Role: "system", Content: "你是一位技术博客编辑。请为文章写一段摘要：50-100字，客观、简洁、准确概括核心内容。直接输出摘要文本，不要加引号、不要加'摘要：'前缀。"},
 		{Role: "user", Content: "请为以下文章生成摘要：\n\n" + text},
@@ -196,6 +200,10 @@ func (s *AIService) PolishStream(ctx context.Context, content string) (*http.Res
 		// 与摘要一致：未配置 API key 时给友好提示，而不是把上游 401 原文暴露给用户
 		return nil, errors.New("AI 功能未配置：请在 config.yaml 设置 ai.api_key 后重启")
 	}
+	// 成本控制：真正调用上游前消费每日额度（防刷接口烧 token）
+	if ok, _ := s.ConsumeAIQuota(); !ok {
+		return nil, errors.New("今日 AI 调用次数已达上限，明天再来吧")
+	}
 	text := truncateRunes(stripHTML(content), 3000)
 	messages := []ChatMessage{
 		{Role: "system", Content: "你是一位资深技术文章编辑。对用户提供的文章内容进行润色：修正错别字、语病，让表达更简洁、专业、通顺；保持原有技术信息与结构不变。只输出润色后的内容，不要任何解释或前缀。"},
@@ -209,17 +217,17 @@ func (s *AIService) PolishStream(ctx context.Context, content string) (*http.Res
 // ----------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------
-// 成本控制：每日问答额度
+// 成本控制：每日 AI 调用额度（问答 / 摘要 / 润色共用）
 // ----------------------------------------------------------------------------
 
-// askQuotaKey 每日问答计数 key：ai:ask:daily:{yyyyMMdd}（按天自动过期）
+// askQuotaKey 每日调用计数 key：ai:ask:daily:{yyyyMMdd}（按天自动过期）
 const askQuotaKey = "ai:ask:daily:"
 
-// ConsumeAskQuota 消费一次每日问答额度（每次问答都调用上游 API 消耗 token）。
+// ConsumeAIQuota 消费一次每日 AI 调用额度（每次调用都消耗上游 token）。
 // 返回 (是否放行, 每日上限)；超限返回 false，由调用方给出友好提示。
 // 降级策略：未配置上限（<=0）或 Redis 不可用时直接放行，
 // 不因计数故障卡死功能（与项目"缓存故障静默降级"哲学一致）。
-func (s *AIService) ConsumeAskQuota() (bool, int) {
+func (s *AIService) ConsumeAIQuota() (bool, int) {
 	maxDaily := config.AppConfig.AI.MaxDailyAsks
 	if maxDaily <= 0 || !cache.Enabled {
 		return true, maxDaily

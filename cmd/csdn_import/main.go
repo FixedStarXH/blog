@@ -373,19 +373,20 @@ func login() (string, error) {
 		return "", fmt.Errorf("登录失败(%d): %s", r.Code, r.Msg)
 	}
 	var data struct {
-		Token string `json:"token"`
+		AccessToken string `json:"accessToken"` // 后台登录返回的是 accessToken（双 token 体系），不是 token
 	}
 	if err := json.Unmarshal(r.Data, &data); err != nil {
 		return "", err
 	}
-	return data.Token, nil
+	return data.AccessToken, nil
 }
 
 // existingTitles 拉取后台所有文章标题（幂等：重复运行跳过已导入的）
 func existingTitles(token string) (map[string]bool, error) {
+	const pageSize = 50 // 后台 pageSize 上限 50，传大了会被重置
 	set := map[string]bool{}
 	for page := 1; ; page++ {
-		url := fmt.Sprintf("%s/api/admin/articles?page=%d&pageSize=50", *baseURL, page) // 后台 pageSize 上限 50，传大了会被重置
+		url := fmt.Sprintf("%s/api/admin/articles?page=%d&pageSize=%d", *baseURL, page, pageSize)
 		r, err := getJSON(url, token)
 		if err != nil {
 			return nil, err
@@ -405,7 +406,9 @@ func existingTitles(token string) (map[string]bool, error) {
 		for _, a := range data.List {
 			set[a.Title] = true
 		}
-		if page*100 >= int(data.Total) {
+		// 停止条件按真实 pageSize 算：之前写死 100，total 介于 (page*50, page*100) 时
+		// 会提前停，最后一页标题没进 set，脚本重跑会重复导入（后端无唯一约束兜底）
+		if page*pageSize >= int(data.Total) {
 			break
 		}
 	}

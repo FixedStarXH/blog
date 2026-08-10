@@ -39,6 +39,14 @@ func main() {
 	r := gin.New()
 	r.Use(gin.Recovery())
 
+	// 安全：只信任回环 + Docker 内网网段的 X-Forwarded-For。
+	// gin 默认信任所有代理，直连部署时攻击者可伪造 XFF 绕过"按 IP 限流/浏览量去重/防爆破"，
+	// 现在 RemoteIP 不在可信列表 → ClientIP() 回退为真实客户端 IP（限流按真实 IP 生效）。
+	// Docker 场景：nginx 容器在 172.16.0.0/12 内，反代下 XFF 仍被信任。
+	if err := r.SetTrustedProxies([]string{"127.0.0.1", "::1", "172.16.0.0/12", "10.0.0.0/8"}); err != nil {
+		log.Fatalf("设置可信代理失败:%v", err)
+	}
+
 	router.Init(r)
 
 	addr := fmt.Sprintf(":%d", config.AppConfig.Server.Port)

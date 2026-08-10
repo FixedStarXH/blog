@@ -269,7 +269,10 @@ func (s *ArticleService) Like(articleID uint, ip string) (*dao.LikeResult, error
 		return nil, err
 	}
 	// 点赞数变了 → 失效详情缓存（列表缓存 1 分钟 TTL 自动过期，不用管）
-	cache.Del(cache.KeyArticle + fmt.Sprint(articleID))
+	// 注意 L1(Local) 也要删：详情是 L1+L2 双写，只删 Redis 会让本地缓存最多 5 分钟读到旧点赞数
+	key := cache.KeyArticle + fmt.Sprint(articleID)
+	cache.Del(key)
+	cache.DelLocal(key)
 	return result, nil
 }
 

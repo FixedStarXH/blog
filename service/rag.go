@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"unicode"
 
 	"blog-system/model"
+
+	"gorm.io/gorm"
 )
 
 // ----------------------------------------------------------------------------
@@ -123,7 +126,14 @@ func (s *AIService) IndexArticle(ctx context.Context, articleID uint) (int, erro
 		return 0, fmt.Errorf("AI 服务未配置（请在 config.yaml 填写 ai.api_key 或设置环境变量 BLOG_AI_API_KEY）")
 	}
 	var article model.Article
-	if err := s.db.Select("id", "content").First(&article, articleID).Error; err != nil {
+	// 安全：只有"已发布 + 无密码"的公开文章才允许进 RAG 索引，
+	// 否则私密/草稿/待审内容会通过公开问答接口被检索/复述出来（IDOR 泄露）
+	if err := s.db.Select("id", "content").
+		Where("status = ? AND password = ''", model.ArticleStatusPublished).
+		First(&article, articleID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, fmt.Errorf("仅公开文章可索引（该文章不存在、未发布或是私密文章）")
+		}
 		return 0, err
 	}
 	text := stripHTML(article.Content)
@@ -164,7 +174,7 @@ func (s *AIService) IndexArticle(ctx context.Context, articleID uint) (int, erro
 func (s *AIService) ReindexAll(ctx context.Context) (indexed int, failed []uint, err error) {
 	var ids []uint
 	if err := s.db.Model(&model.Article{}).
-		Where("status = ?", model.ArticleStatusPublished).
+		Where("status = ? AND password = ''", model.ArticleStatusPublished). // 只索引公开文章，私密不进库
 		Pluck("id", &ids).Error; err != nil {
 		return 0, nil, err
 	}
@@ -221,7 +231,14 @@ func extractKeywords(q string) []string {
 func (s *AIService) fullTextContext(ctx context.Context, question string, articleID *uint) (string, error) {
 	if articleID != nil {
 		var a model.Article
-		if err := s.db.Select("id", "title", "content").First(&a, *articleID).Error; err != nil {
+		// 安全：单篇文章问答只允许公开文章（已发布 + 无密码），
+		// 否则降级全文模式下任何游客都能按 ID 复述私密/未发布正文
+		if err := s.db.Select("id", "title", "content").
+			Where("status = ? AND password = ''", model.ArticleStatusPublished).
+			First(&a, *articleID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return "", fmt.Errorf("文章不存在或不可公开问答（未发布/私密文章）")
+			}
 			return "", err
 		}
 		return fmt.Sprintf("【来自文章《%s》】\n%s", a.Title, truncateRunes(stripHTML(a.Content), fullTextMaxRunes)), nil
@@ -231,7 +248,7 @@ func (s *AIService) fullTextContext(ctx context.Context, question string, articl
 	kw := extractKeywords(question)
 	var arts []model.Article
 	if err := s.db.Select("id", "title", "content").
-		Where("status = ?", model.ArticleStatusPublished).
+		Where("status = ? AND password = ''", model.ArticleStatusPublished). // 排除私密文章
 		Find(&arts).Error; err != nil {
 		return "", err
 	}
@@ -284,9 +301,13 @@ type topHit struct {
 
 // search 问题向量化后，在库里检索最相似的 topK 个块
 func (s *AIService) search(ctx context.Context, qVec []float32, articleID *uint, topK int) ([]topHit, error) {
-	query := s.db.Model(&model.ArticleChunk{})
+	query := s.db.Model(&model.ArticleChunk{}).
+		// 安全：只检索"已发布 + 无密码"的公开文章块。
+		// 即使库里残留了私密/未发布文章的旧索引块，也在此排除，杜绝旁路泄露
+		Joins("JOIN articles ON articles.id = article_chunks.article_id").
+		Where("articles.status = ? AND articles.password = '' AND articles.deleted_at IS NULL", model.ArticleStatusPublished)
 	if articleID != nil {
-		query = query.Where("article_id = ?", *articleID)
+		query = query.Where("article_chunks.article_id = ?", *articleID)
 	}
 	var chunks []model.ArticleChunk
 	if err := query.Find(&chunks).Error; err != nil {

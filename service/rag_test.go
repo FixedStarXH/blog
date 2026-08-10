@@ -8,7 +8,7 @@ import (
 	"blog-system/config"
 )
 
-// init 设置测试配置（ConsumeAskQuota 等需要读 config.AppConfig）
+// init 设置测试配置（ConsumeAIQuota 等需要读 config.AppConfig）
 // 每日上限设 0 = 不限额：验证"未配置限额直接放行"的降级分支
 func init() {
 	config.AppConfig = &config.Config{
@@ -155,11 +155,11 @@ func TestVectorRoundTrip(t *testing.T) {
 	}
 }
 
-func TestConsumeAskQuotaDegrade(t *testing.T) {
+func TestConsumeAIQuotaDegrade(t *testing.T) {
 	// 未配置上限（MaxDailyAsks=0）：必须直接放行，不能卡死功能
 	// （cache.Enabled 在测试环境为 false，天然模拟"Redis 不可用"）
 	s := &AIService{}
-	if ok, limit := s.ConsumeAskQuota(); !ok || limit != 0 {
+	if ok, limit := s.ConsumeAIQuota(); !ok || limit != 0 {
 		t.Errorf("未配置限额时应放行（limit=0），实际 ok=%v limit=%d", ok, limit)
 	}
 }

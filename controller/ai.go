@@ -82,7 +82,7 @@ func (c *AIController) SummarizeArticle(ctx *gin.Context) {
 		return
 	}
 	var article model.Article
-	if err := model.DB.Select("content", "summary").Where("status = ?", model.ArticleStatusPublished).First(&article, id).Error; err != nil {
+	if err := model.DB.Select("content", "summary").Where("status = ? AND password = ''", model.ArticleStatusPublished).First(&article, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			utils.Fail(ctx, "文章不存在或未发布")
 			return
@@ -179,6 +179,11 @@ func (c *AIController) Ask(ctx *gin.Context) {
 		utils.Fail(ctx, "参数错误：问题不能为空")
 		return
 	}
+	// 问题长度上限：防超长问题刷 token（正常问题几百字封顶）
+	if len([]rune(req.Question)) > 2000 {
+		utils.Fail(ctx, "问题过长（最多 2000 字）")
+		return
+	}
 	// 历史消息安全校验：只收 user/assistant、限 8 条、每条 ≤ 500 字、总数 ≤ 2000 字
 	// （防注入 system 角色、防超长 history 刷 token）
 	history := make([]service.ChatMessage, 0, len(req.History))
@@ -201,10 +206,21 @@ func (c *AIController) Ask(ctx *gin.Context) {
 		}
 		history = append(history, service.ChatMessage{Role: role, Content: content})
 	}
-	// AI 每次调用都消耗 token 额度：先检查每日问答上限（超限当天直接拒绝）
-	// 未配置限额或 Redis 不可用时 ConsumeAskQuota 自动放行
-	if ok, limit := c.svc.ConsumeAskQuota(); !ok {
-		utils.Fail(ctx, fmt.Sprintf("今日 AI 问答次数已达上限（%d 次），明天再来吧", limit))
+	// 安全：限定单篇文章问答时，必须是一篇"已发布 + 无密码"的公开文章。
+	// 否则任意游客传草稿/待审/私密文章 ID，AI 会基于该正文作答（内容泄露）
+	if req.ArticleID != nil {
+		var art model.Article
+		if err := model.DB.Select("id").
+			Where("id = ? AND status = ? AND password = ''", *req.ArticleID, model.ArticleStatusPublished).
+			First(&art).Error; err != nil {
+			utils.Fail(ctx, "文章不存在或不可公开问答（未发布/私密文章）")
+			return
+		}
+	}
+	// AI 每次调用都消耗 token 额度：先检查每日 AI 调用上限（问答/摘要/润色共用，超限当天直接拒绝）
+	// 未配置限额或 Redis 不可用时 ConsumeAIQuota 自动放行
+	if ok, limit := c.svc.ConsumeAIQuota(); !ok {
+		utils.Fail(ctx, fmt.Sprintf("今日 AI 调用次数已达上限（%d 次），明天再来吧", limit))
 		return
 	}
 	body, err := c.svc.AskStream(ctx.Request.Context(), req.Question, req.ArticleID, history)

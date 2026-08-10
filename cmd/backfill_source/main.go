@@ -127,10 +127,10 @@ func login() (string, error) {
 		return "", fmt.Errorf("登录失败(%d): %s", r.Code, r.Msg)
 	}
 	var data struct {
-		Token string `json:"token"`
+		AccessToken string `json:"accessToken"` // 后台登录返回的是 accessToken（双 token 体系），不是 token
 	}
 	json.Unmarshal(r.Data, &data)
-	return data.Token, nil
+	return data.AccessToken, nil
 }
 
 // ==================== 抓 CSDN RSS（标题→原文URL） ====================
