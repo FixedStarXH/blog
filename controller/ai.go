@@ -171,8 +171,8 @@ func (c *AIController) IndexStatus(ctx *gin.Context) {
 // POST /api/ai/ask  Body: {"question":"...", "articleId": 可选(限定单篇文章), "history": [{"role":"user|assistant","content":"..."}]}
 func (c *AIController) Ask(ctx *gin.Context) {
 	var req struct {
-		Question  string             `json:"question" binding:"required"`
-		ArticleID *uint              `json:"articleId"`
+		Question  string                `json:"question" binding:"required"`
+		ArticleID *uint                 `json:"articleId"`
 		History   []service.ChatMessage `json:"history"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -200,6 +200,12 @@ func (c *AIController) Ask(ctx *gin.Context) {
 			break
 		}
 		history = append(history, service.ChatMessage{Role: role, Content: content})
+	}
+	// AI 每次调用都消耗 token 额度：先检查每日问答上限（超限当天直接拒绝）
+	// 未配置限额或 Redis 不可用时 ConsumeAskQuota 自动放行
+	if ok, limit := c.svc.ConsumeAskQuota(); !ok {
+		utils.Fail(ctx, fmt.Sprintf("今日 AI 问答次数已达上限（%d 次），明天再来吧", limit))
+		return
 	}
 	body, err := c.svc.AskStream(ctx.Request.Context(), req.Question, req.ArticleID, history)
 	if err != nil {

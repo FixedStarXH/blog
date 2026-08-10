@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"blog-system/cache"
 	"blog-system/config"
 
 	"gorm.io/gorm"
@@ -204,6 +205,38 @@ func (s *AIService) PolishStream(ctx context.Context, content string) (*http.Res
 }
 
 // ----------------------------------------------------------------------------
+// 业务能力三：AI 问答（RAG，见 rag.go）
+// ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+// 成本控制：每日问答额度
+// ----------------------------------------------------------------------------
+
+// askQuotaKey 每日问答计数 key：ai:ask:daily:{yyyyMMdd}（按天自动过期）
+const askQuotaKey = "ai:ask:daily:"
+
+// ConsumeAskQuota 消费一次每日问答额度（每次问答都调用上游 API 消耗 token）。
+// 返回 (是否放行, 每日上限)；超限返回 false，由调用方给出友好提示。
+// 降级策略：未配置上限（<=0）或 Redis 不可用时直接放行，
+// 不因计数故障卡死功能（与项目"缓存故障静默降级"哲学一致）。
+func (s *AIService) ConsumeAskQuota() (bool, int) {
+	maxDaily := config.AppConfig.AI.MaxDailyAsks
+	if maxDaily <= 0 || !cache.Enabled {
+		return true, maxDaily
+	}
+	key := askQuotaKey + time.Now().Format("20060102")
+	n, err := cache.Client.Incr(cache.Ctx, key).Result()
+	if err != nil {
+		return true, maxDaily // Redis 异常：降级放行
+	}
+	if n == 1 {
+		// 首次计数：设 24h 过期，第二天自动清零（无需定时任务）
+		cache.Client.Expire(cache.Ctx, key, 24*time.Hour)
+	}
+	return n <= int64(maxDaily), maxDaily
+}
+
+// ----------------------------------------------------------------------------
 // 工具函数
 // ----------------------------------------------------------------------------
 
@@ -211,12 +244,16 @@ func (s *AIService) PolishStream(ctx context.Context, content string) (*http.Res
 // 关键：块级元素结束标签保留为换行，保留段落结构 ——
 // 降级摘要 fallbackSummary 依赖换行按"自然段"拼接，不能把段落压成一行。
 var htmlTagRegex = regexp.MustCompile(`<[^>]+>`)
+var htmlBrRegex = regexp.MustCompile(`(?i)<br\s*/?>`) // 自闭合换行标签 <br> / <br/>
 var htmlBlockRegex = regexp.MustCompile(`(?i)</(p|div|h[1-6]|li|ul|ol|blockquote|pre|table|tr|section|article|br)>`)
 var htmlInlineSpaceRegex = regexp.MustCompile(`[^\S\n]+`) // 空白但排除换行 → 压成单空格
 var htmlBlankLineRegex = regexp.MustCompile(`\n{2,}`)
 
 func stripHTML(s string) string {
-	// 先处理 <br>（自闭合，无结束标签），再给块级结束标签补换行
+	// 先处理 <br>（自闭合，无结束标签，必须单独匹配），
+	// 再给块级结束标签（</p> 等）补换行 —— 顺序不能反：
+	// 若先匹配结束标签，<br> 会落进 htmlTagRegex 被当成普通标签删成空格
+	s = htmlBrRegex.ReplaceAllString(s, "\n")
 	s = htmlBlockRegex.ReplaceAllString(s, "\n")
 	s = htmlTagRegex.ReplaceAllString(s, " ")
 	s = strings.ReplaceAll(s, "&nbsp;", " ")

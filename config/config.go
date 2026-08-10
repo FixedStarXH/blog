@@ -53,12 +53,13 @@ type JWTConfig struct {
 //
 // 生产 key 用环境变量注入：BLOG_AI_API_KEY
 type AIConfig struct {
-	Enabled     bool   `mapstructure:"enabled"`
-	BaseURL     string `mapstructure:"base_url"`
-	APIKey      string `mapstructure:"api_key"`
-	ChatModel   string `mapstructure:"chat_model"`
-	EmbedModel  string `mapstructure:"embed_model"`
-	TimeoutSecs int    `mapstructure:"timeout_secs"`
+	Enabled      bool   `mapstructure:"enabled"`
+	BaseURL      string `mapstructure:"base_url"`
+	APIKey       string `mapstructure:"api_key"`
+	ChatModel    string `mapstructure:"chat_model"`
+	EmbedModel   string `mapstructure:"embed_model"`
+	TimeoutSecs  int    `mapstructure:"timeout_secs"`
+	MaxDailyAsks int    `mapstructure:"max_daily_asks"` // 每日问答次数上限；<=0 表示不限制（防刷接口烧 token 额度）
 }
 
 func (m *MySQLConfig) DSN() string {
@@ -95,6 +96,7 @@ func Init() error {
 	viper.SetDefault("ai.chat_model", "deepseek-ai/DeepSeek-V3")
 	viper.SetDefault("ai.embed_model", "BAAI/bge-m3")
 	viper.SetDefault("ai.timeout_secs", 30)
+	viper.SetDefault("ai.max_daily_asks", 200)
 
 	// 本地开发：config.yaml 存在才读取（缺文件时不报错，Docker 场景只靠 env+默认值）
 	if _, err := os.Stat("config.yaml"); err == nil {

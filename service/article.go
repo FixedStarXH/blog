@@ -28,6 +28,13 @@ type articleListCache struct {
 	Total int64           `json:"total"`
 }
 
+// dropArticleRAGIndex 文章内容变更/删除后，清掉该文章的 RAG 索引块。
+// 向量是正文的派生数据：内容一变旧向量就失效，不删会让问答命中旧内容。
+// 注意只做"失效"不做重建——后台"一键索引"或 IndexArticle 会重新生成。
+func (s *ArticleService) dropArticleRAGIndex(id uint) {
+	s.db.Where("article_id = ?", id).Delete(&model.ArticleChunk{})
+}
+
 func (s *ArticleService) GetPublishedArticles(keyword string, authorID uint, tag string, categoryID uint, sortBy string, page, pageSize int) ([]model.Article, int64, error) {
 	if pageSize <= 0 || pageSize > 50 {
 		pageSize = 10
@@ -180,8 +187,9 @@ func (s *ArticleService) UpdateMyArticle(id, authorID, categoryID uint, title, c
 	if err != nil {
 		return err
 	}
-	// 内容/标签变了 → 失效该文章详情 + 列表缓存
+	// 内容/标签变了 → 失效该文章详情 + 列表缓存 + RAG 索引（旧向量会命中旧内容）
 	cache.InvalidateArticleRelated(id)
+	s.dropArticleRAGIndex(id)
 	return nil
 }
 
@@ -201,6 +209,7 @@ func (s *ArticleService) DeleteMyArticle(id, authorID uint) error {
 		return err
 	}
 	cache.InvalidateArticleRelated(id)
+	s.dropArticleRAGIndex(id)
 	return nil
 }
 
@@ -455,6 +464,7 @@ func (s *ArticleService) AdminUpdateArticle(id, categoryID uint, title, content,
 		return err
 	}
 	cache.InvalidateArticleRelated(id)
+	s.dropArticleRAGIndex(id) // 内容变更：旧向量块失效，待后台重建索引
 	return nil
 }
 
@@ -476,6 +486,7 @@ func (s *ArticleService) AdminDeleteArticle(id uint) error {
 		return err
 	}
 	cache.InvalidateArticleRelated(id)
+	s.dropArticleRAGIndex(id)
 	return nil
 }
 
@@ -509,6 +520,9 @@ func (s *ArticleService) BatchArticleOp(ids []uint, action string) (int64, error
 	// 批量操作影响多篇文章：全量清掉文章相关缓存（列表/热门/归档/计数）
 	for _, id := range ids {
 		cache.Del(cache.KeyArticle + fmt.Sprint(id))
+		if action == "delete" {
+			s.dropArticleRAGIndex(id) // 批量删除：旧向量块一并失效
+		}
 	}
 	cache.DelPrefix(cache.KeyArticleList)
 	cache.Del(cache.KeyHot, cache.KeyArchives, cache.KeyCategories, cache.KeyTags)
