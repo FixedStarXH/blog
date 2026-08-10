@@ -129,6 +129,10 @@
             <input type="checkbox" id="a-isTop">
             <label for="a-isTop" style="margin:0;">设为置顶(首页头条优先)</label>
           </div>
+          <div class="field check">
+            <input type="checkbox" id="a-isFeatured">
+            <label for="a-isFeatured" style="margin:0;">设为首页精选(显示在首页推荐区)</label>
+          </div>
         </div>
         <div class="form-actions">
           <button class="btn primary" type="submit">保存</button>
@@ -253,6 +257,7 @@
       document.getElementById('a-id').value = '';
       ['a-title', 'a-summary', 'a-coverImage', 'a-content', 'a-tagIds', 'a-publishAt', 'a-password'].forEach(id => document.getElementById(id).value = '');
       document.getElementById('a-isTop').checked = false;
+      document.getElementById('a-isFeatured').checked = false;
       document.getElementById('a-status').value = '1';
       await loadCatsForForm();
       document.getElementById('a-title').focus();
@@ -270,6 +275,7 @@
         document.getElementById('a-content').value = a.content || '';
         document.getElementById('a-status').value = a.status;
         document.getElementById('a-isTop').checked = !!a.isTop;
+        document.getElementById('a-isFeatured').checked = !!a.isFeatured;
         document.getElementById('a-password').value = a.password || '';
         document.getElementById('a-tagIds').value = (a.tags || []).map(t => t.id).join(',');
         if (a.publishAt) {
@@ -295,6 +301,7 @@
         categoryId: parseInt(document.getElementById('a-categoryId').value),
         status: parseInt(document.getElementById('a-status').value),
         isTop: document.getElementById('a-isTop').checked,
+        isFeatured: document.getElementById('a-isFeatured').checked,
         password: document.getElementById('a-password').value.trim() || '',
         tagIds: document.getElementById('a-tagIds').value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)),
         publishAt: document.getElementById('a-publishAt').value ? new Date(document.getElementById('a-publishAt').value).toISOString() : null,

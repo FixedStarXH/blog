@@ -58,6 +58,19 @@ func (c *ArticleController) GetArticleList(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("pageSize", "10"))
 
+	// 首页精选：featured=true 只返回后台勾选 is_featured 的文章
+	// seed 由前端每次进入页面生成一次：RAND(seed) 保证同一次访问内翻页顺序稳定、每次刷新顺序不同
+	if ctx.Query("featured") == "true" {
+		seed, _ := strconv.ParseInt(ctx.DefaultQuery("seed", "1"), 10, 64)
+		articles, total, err := c.service.GetFeaturedArticles(page, pageSize, seed)
+		if err != nil {
+			utils.Error(ctx, "获取精选文章失败")
+			return
+		}
+		utils.Success(ctx, gin.H{"list": articles, "total": total, "page": page, "pageSize": pageSize})
+		return
+	}
+
 	articles, total, err := c.service.GetPublishedArticles(keyword, uint(authorID), tag, uint(categoryID), sortBy, page, pageSize)
 	if err != nil {
 		utils.Error(ctx, "获取文章列表失败")
@@ -372,17 +385,18 @@ func (c *ArticleController) UnlockArticle(ctx *gin.Context) {
 // 后台文章管理（编辑+）：管理员可操作任何人的文章
 // ------------------------------------------------------------
 
-// adminArticleRequest 后台新建/编辑文章：比作者投稿多 status/isTop（管理员可直接定稿）
+// adminArticleRequest 后台新建/编辑文章：比作者投稿多 status/isTop/isFeatured（管理员可直接定稿）
 type adminArticleRequest struct {
 	Title      string     `json:"title" binding:"required"`
 	Content    string     `json:"content" binding:"required"`
 	Summary    string     `json:"summary"`
 	CoverImage string     `json:"coverImage"`
-	SourceURL  string     `json:"sourceUrl"` // 转载来源链接；可空
-	Status     int        `json:"status"`    // 0草稿 1发布 2待审 3驳回 4已排期
-	IsTop      bool       `json:"isTop"`     // 置顶
-	Password   string     `json:"password"`  // 私密文章密码；空=公开
-	PublishAt  *time.Time `json:"publishAt"` // 定时发布
+	SourceURL  string     `json:"sourceUrl"`  // 转载来源链接；可空
+	Status     int        `json:"status"`     // 0草稿 1发布 2待审 3驳回 4已排期
+	IsTop      bool       `json:"isTop"`      // 置顶
+	IsFeatured bool       `json:"isFeatured"` // 首页精选
+	Password   string     `json:"password"`   // 私密文章密码；空=公开
+	PublishAt  *time.Time `json:"publishAt"`  // 定时发布
 	CategoryID uint       `json:"categoryId" binding:"required"`
 	TagIDs     []uint     `json:"tagIds"`
 }
@@ -415,6 +429,7 @@ func (c *ArticleController) GetAdminArticleDetail(ctx *gin.Context) {
 		"content":    article.Content,
 		"status":     article.Status,
 		"isTop":      article.IsTop,
+		"isFeatured": article.IsFeatured,
 		"password":   article.Password,
 		"categoryId": article.CategoryID,
 		"publishAt":  article.PublishAt,
@@ -433,7 +448,7 @@ func (c *ArticleController) CreateAdminArticle(ctx *gin.Context) {
 		return
 	}
 	userID := middleware.GetUserID(ctx)
-	article, err := c.service.AdminCreateArticle(userID, req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.SourceURL, req.Password, req.PublishAt, req.Status, req.IsTop, req.TagIDs)
+	article, err := c.service.AdminCreateArticle(userID, req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.SourceURL, req.Password, req.PublishAt, req.Status, req.IsTop, req.IsFeatured, req.TagIDs)
 	if err != nil {
 		utils.Fail(ctx, err.Error())
 		return
@@ -454,7 +469,7 @@ func (c *ArticleController) UpdateAdminArticle(ctx *gin.Context) {
 		utils.Fail(ctx, "参数错误："+err.Error())
 		return
 	}
-	if err := c.service.AdminUpdateArticle(uint(id), req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.SourceURL, req.Password, req.PublishAt, req.Status, req.IsTop, req.TagIDs); err != nil {
+	if err := c.service.AdminUpdateArticle(uint(id), req.CategoryID, req.Title, req.Content, req.Summary, req.CoverImage, req.SourceURL, req.Password, req.PublishAt, req.Status, req.IsTop, req.IsFeatured, req.TagIDs); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			utils.Fail(ctx, "文章不存在")
 			return

@@ -4,6 +4,13 @@
 
 initPage('home').then(loadHome);
 
+// 首页精选分页状态：每页 6 篇，翻页浏览全部精选文章
+// featuredSeed：每次进入页面生成一次随机种子，后端 RAND(seed) 排序——
+// 同一次访问内翻页顺序稳定不重叠，每次刷新（新种子）文章顺序/组合都不同
+let curPage = 1;
+const pageSize = 6;
+const featuredSeed = Math.floor(Math.random() * 2147483647);
+
 async function loadHome() {
   // 骨架占位：分类索引 + 最新文章先显示加载骨架（替换转圈）
   const catList = document.getElementById('cat-list');
@@ -32,14 +39,55 @@ async function loadHome() {
     const cats = await api.get('/api/categories');
     renderCats(cats);
 
-    // 最新文章(取前 6 篇)
-    const data = await api.get('/api/articles?page=1&pageSize=6&sort=latest');
-    renderFeature(data.list);
-    renderDir(data.list, data.total);
+    await loadFeature();
   } catch (e) {
     toast(e.message, true);
     document.getElementById('dir-list').innerHTML = '<div class="empty">文章加载失败: ' + esc(e.message) + '</div>';
   }
+}
+
+// 加载精选文章 + 渲染目录 + 渲染分页
+// 首页精选(每页 6 篇)：后台勾选"首页精选"的文章随机展示（ORDER BY RAND）
+// 若后台未勾选任何精选，回退到最新文章，保证首页永远有内容
+async function loadFeature() {
+  const dirList = document.getElementById('dir-list');
+  if (!dirList.childElementCount || !dirList.querySelector('.entry')) {
+    dirList.innerHTML = skelEntries(6);
+  }
+  let data = await api.get(`/api/articles?page=${curPage}&pageSize=${pageSize}&sort=latest&featured=true&seed=${featuredSeed}`);
+  if (!data.list || !data.list.length) {
+    data = await api.get(`/api/articles?page=${curPage}&pageSize=${pageSize}&sort=latest`);
+  }
+  renderFeature(data.list);
+  renderDir(data.list, data.total);
+  renderPagination(data.total);
+}
+
+// 分页控件：原地翻页不刷新，页码样式复用全局 .pagination
+function renderPagination(total) {
+  const wrap = document.getElementById('pagination');
+  if (!wrap) return;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  let html = '';
+  html += `<button class="page-btn ${curPage <= 1 ? 'disabled' : ''}" data-page="${curPage - 1}">←</button>`;
+  for (let i = 1; i <= totalPages; i++) {
+    html += i === curPage
+      ? `<span class="cur">${i}</span>`
+      : `<button class="page-btn" data-page="${i}">${i}</button>`;
+  }
+  html += `<button class="page-btn ${curPage >= totalPages ? 'disabled' : ''}" data-page="${curPage + 1}">→</button>`;
+  wrap.innerHTML = html;
+
+  wrap.querySelectorAll('.page-btn:not(.disabled)').forEach(btn => {
+    btn.addEventListener('click', () => {
+      curPage = parseInt(btn.dataset.page, 10);
+      loadFeature();
+      // 平滑滚动回目录区顶部，翻页后不丢失位置感
+      const dir = document.querySelector('.directory');
+      if (dir) window.scrollTo({ top: dir.offsetTop - 72, behavior: 'smooth' });
+    });
+  });
 }
 
 function renderCats(cats) {

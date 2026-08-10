@@ -12,6 +12,7 @@ import "time"
 // 特色字段：
 //   - RejectReason 驳回原因（状态=3 时给作者看）
 //   - IsTop 置顶（首页头条）
+//   - IsFeatured 首页精选（首页推荐文章，后台可勾选）
 //   - PublishAt 发布时间（支持定时发布）
 //   - Password 私密文章密码（解锁后可见）
 type Article struct {
@@ -21,12 +22,13 @@ type Article struct {
 	Content      string     `gorm:"type:longtext;not null;comment:正文HTML" json:"content"` // 必填，前端渲染 HTML
 	Summary      string     `gorm:"size:500;comment:摘要" json:"summary"`                   // 列表页显示，可空
 	CoverImage   string     `gorm:"size:255;comment:封面图URL" json:"coverImage"`            // 列表页缩略图，可空
-	SourceURL    string     `gorm:"size:255;comment:原文链接" json:"sourceUrl"`              // 转载来源（如 CSDN 原文地址），可空
+	SourceURL    string     `gorm:"size:255;comment:原文链接" json:"sourceUrl"`               // 转载来源（如 CSDN 原文地址），可空
 	ViewCount    int        `gorm:"default:0;comment:阅读量" json:"viewCount"`               // 冗余计数（明细在 article_views）
 	LikeCount    int        `gorm:"default:0;comment:点赞数" json:"likeCount"`               // 冗余计数（明细在 article_likes）
 	Status       int        `gorm:"default:0;index;comment:0草稿1发布2待审3驳回" json:"status"`   // 默认 ArticleStatusDraft=0
 	RejectReason string     `gorm:"size:255;comment:驳回原因" json:"rejectReason"`            // 状态=3 时填写
 	IsTop        bool       `gorm:"default:false;index;comment:是否置顶" json:"isTop"`        // 首页头条用，加索引方便筛选
+	IsFeatured   bool       `gorm:"default:false;index;comment:是否首页精选" json:"isFeatured"` // 首页推荐展示用，后台勾选
 	PublishAt    *time.Time `json:"publishAt"`                                            // 发布时间；指针类型=可空，支持定时发布
 	Password     string     `gorm:"size:255;comment:私密文章密码" json:"-"`                     // json:"-" 密码永不返回；空=公开文章
 	AuthorID     uint       `gorm:"not null;index;comment:作者ID" json:"authorId"`          // 作者 FK（多作者）

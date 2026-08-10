@@ -48,7 +48,7 @@ func (s *ArticleService) GetPublishedArticles(keyword string, authorID uint, tag
 	}
 
 	// ② 缓存未命中 → 查数据库
-	articles, total, err := s.dao.FindPublished(s.db, keyword, authorID, tag, categoryID, sortBy, page, pageSize)
+	articles, total, err := s.dao.FindPublished(s.db, keyword, authorID, tag, categoryID, sortBy, page, pageSize, false, 0)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -58,6 +58,19 @@ func (s *ArticleService) GetPublishedArticles(keyword string, authorID uint, tag
 		cache.Set(key, articleListCache{List: articles, Total: total}, cache.TTLList)
 	}
 	return articles, total, nil
+}
+
+// GetFeaturedArticles 首页精选（后台勾选 is_featured 的文章）
+// 与 GetPublishedArticles 区别：只查精选、数量少、后台变更频繁，不走缓存避免读到旧数据
+// seed 由前端每次进入页面生成一次，保证同一次访问内翻页顺序稳定、每次刷新顺序不同
+func (s *ArticleService) GetFeaturedArticles(page, pageSize int, seed int64) ([]model.Article, int64, error) {
+	if pageSize <= 0 || pageSize > 50 {
+		pageSize = 10
+	}
+	if page <= 0 {
+		page = 1
+	}
+	return s.dao.FindPublished(s.db, "", 0, "", 0, "latest", page, pageSize, true, seed)
 }
 
 // GetArticleByID 文章详情（公开接口）：私密文章不返回正文，标记 needPassword
@@ -375,7 +388,7 @@ func (s *ArticleService) GetAdminArticleDetail(id uint) (*model.Article, error) 
 
 // AdminCreateArticle 后台代发/新建文章：状态与置顶由后台直接指定
 // （和作者投稿不同：投稿固定走"待审核"，管理员自己发可以直接发布）
-func (s *ArticleService) AdminCreateArticle(authorID, categoryID uint, title, content, summary, coverImage, sourceURL, password string, publishAt *time.Time, status int, isTop bool, tagIDs []uint) (*model.Article, error) {
+func (s *ArticleService) AdminCreateArticle(authorID, categoryID uint, title, content, summary, coverImage, sourceURL, password string, publishAt *time.Time, status int, isTop, isFeatured bool, tagIDs []uint) (*model.Article, error) {
 	tags := make([]model.Tag, 0, len(tagIDs))
 	for _, id := range tagIDs {
 		tags = append(tags, model.Tag{BaseModel: model.BaseModel{ID: id}})
@@ -390,6 +403,7 @@ func (s *ArticleService) AdminCreateArticle(authorID, categoryID uint, title, co
 		PublishAt:  publishAt,
 		Status:     status,
 		IsTop:      isTop,
+		IsFeatured: isFeatured,
 		AuthorID:   authorID,
 		CategoryID: categoryID,
 		Tags:       tags,
@@ -402,8 +416,8 @@ func (s *ArticleService) AdminCreateArticle(authorID, categoryID uint, title, co
 	return article, nil
 }
 
-// AdminUpdateArticle 后台编辑任意文章（含置顶/状态）
-func (s *ArticleService) AdminUpdateArticle(id, categoryID uint, title, content, summary, coverImage, sourceURL, password string, publishAt *time.Time, status int, isTop bool, tagIDs []uint) error {
+// AdminUpdateArticle 后台编辑任意文章（含置顶/精选/状态）
+func (s *ArticleService) AdminUpdateArticle(id, categoryID uint, title, content, summary, coverImage, sourceURL, password string, publishAt *time.Time, status int, isTop, isFeatured bool, tagIDs []uint) error {
 	// 先判存在：GORM 的 Updates 查不到行返回 nil 不报错
 	if _, err := s.dao.FindByID(s.db, id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -423,6 +437,7 @@ func (s *ArticleService) AdminUpdateArticle(id, categoryID uint, title, content,
 		"publish_at":  publishAt,
 		"status":      status,
 		"is_top":      isTop,
+		"is_featured": isFeatured,
 	}
 	// 更新字段 + 替换标签事务化：避免"内容已改、标签没改"的脏数据
 	err := s.db.Transaction(func(tx *gorm.DB) error {

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 
 <head>
@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LUMI — 技术博客</title>
   <meta name="description" content="一个 Go 开发者的技术博客,记录后端、数据库与工具链的实践。">
-  <link rel="stylesheet" href="css/style.css?v=22">
+  <link rel="stylesheet" href="css/style.css?v=28">
 </head>
 
 <body>
@@ -54,17 +54,18 @@
     <div class="grid" id="feature-sec"></div>
   </section>
 
-  <!-- 最新文章目录表 -->
+  <!-- 精选文章目录表 -->
   <main class="directory">
     <div class="grid">
       <div class="head">
-        <h2>最新文章</h2>
+        <h2>精选文章</h2>
         <span class="n"><b id="dir-total">0</b> / TOTAL</span>
       </div>
       <div class="dir-head">
         <span>№</span><span>Title</span><span class="col-c">Category</span><span class="col-d">Date</span>
       </div>
       <div id="dir-list"></div>
+      <div class="pagination" id="pagination"></div>
       <div class="dir-foot">
         <a href="articles.html">查看全部文章 Archive →</a>
       </div>
@@ -92,9 +93,9 @@
   <footer class="footer" id="footer"></footer>
 
   <script src="js/api.js?v=11"></script>
-  <script src="js/common.js?v=19"></script>
+  <script src="js/common.js?v=21"></script>
   <script type="module" src="./src/main-public.jsx"></script>
-  <script src="js/home.js?v=9"></script>
+  <script src="js/home.js?v=12"></script>
 </body>
 
 </html>

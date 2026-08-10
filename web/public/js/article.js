@@ -310,6 +310,8 @@ function initReadingProgress() {
   update();
 }
 
+// 右侧固定目录：双栏(>900px)时在侧栏 sticky 跟随阅读高亮；
+// 单栏(≤900px)时由 CSS 隐藏（目录不在正文下方出现，避免遮挡内容）
 function renderTOC() {
   const content = document.getElementById('article-content');
   if (!content) return;

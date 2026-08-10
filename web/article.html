@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>文章 — LUMI</title>
   <meta name="description" content="博客文章详情。">
-  <link rel="stylesheet" href="css/style.css?v=22">
+  <link rel="stylesheet" href="css/style.css?v=28">
   <!-- 阅读进度条（固定顶部细条） -->
   <style>
     .reading-progress {
@@ -40,18 +40,20 @@
   <footer class="footer" id="footer"></footer>
 
   <script src="js/api.js?v=12"></script>
-  <script src="js/common.js?v=19"></script>
+  <script src="js/common.js?v=21"></script>
   <script type="module" src="./src/main-public.jsx"></script>
-  <script src="js/article.js?v=17"></script>
+  <script src="js/article.js?v=19"></script>
 
   <!-- ===================== AI 问答悬浮框（Swiss：硬边框/红黑/大写标签/硬阴影） ===================== -->
   <style>
-    /* 悬浮入口：方形红块 + 硬阴影 + 扫光，hover 位移上浮变墨黑 */
-    /* 注意：bottom:146px 需高于浮动导航组(返回/回顶, 桌面占 bottom 28~124px)，避免重叠 */
+    /* AI 悬浮键：独立常驻（页面顶部也可点），尺寸缩放与浮动导航组(返回/回顶)在同一断点一起进行，
+       AI 键略大（54px vs 44px），窄屏时一起缩小（48px vs 40px）。
+       位置 bottom 需高于浮动导航组：桌面导航组顶 124px，AI 键 136px（间距 12px）；
+       ≤600px 导航组顶 104px，AI 键 116px（间距 12px）。 */
     #ai-chat-btn {
       position: fixed;
       right: 20px;
-      bottom: 146px;
+      bottom: 136px;
       z-index: 9999;
       width: 54px;
       height: 54px;
@@ -94,24 +96,23 @@
       left: 120%;
     }
 
-    /* 窄屏（≤900px，与 style.css 断点一致）：浮动导航变小(40px+8gap, 占 16~104px)，
-       AI 键从 146 提到 116(间隔 12px)、面板同步降到 182，两键距离更紧凑不重叠 */
-    @media (max-width: 900px) {
+    /* ≤600px（与 style.css 断点一致）：三个键一起缩小，AI 键仍略大(48 vs 40)，
+       位置同步上抬到导航组顶(104px)+12px */
+    @media (max-width: 600px) {
       #ai-chat-btn {
+        width: 48px;
+        height: 48px;
+        font-size: 16px;
         bottom: 116px;
-      }
-
-      #ai-chat-panel {
-        bottom: 182px;
       }
     }
 
     /* ============ 面板（升级：完整对话界面，参考 AiChat.vue 方向） ============ */
-    /* 面板定位在 AI 键正上方（按钮顶 200px，留 12px 间距） */
+    /* 面板定位在 AI 键正上方（AI 键顶 190px + 12px 间距） */
     #ai-chat-panel {
       position: fixed;
       right: 20px;
-      bottom: 212px;
+      bottom: 202px;
       z-index: 9999;
       width: 400px;
       max-width: calc(100vw - 40px);
@@ -122,6 +123,13 @@
       box-shadow: 4px 4px 0 var(--ink, #1A1915);
       display: none;
       flex-direction: column;
+    }
+
+    /* ≤600px：三键整体变矮，面板跟着抬到 AI 键顶(164px)+12px */
+    @media (max-width: 600px) {
+      #ai-chat-panel {
+        bottom: 176px;
+      }
     }
 
     /* 头部：参考稿风格，白底 + 底部墨黑边框，左侧青绿头像 */

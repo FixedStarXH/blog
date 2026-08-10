@@ -1733,13 +1733,32 @@ body.dark .entry:hover .date {
   padding: 0 4px;
 }
 
-/* 目录 */
+/* 右侧固定目录：仅双栏(>900px)显示，sticky 跟随阅读、过长时内部滚动 */
 .toc {
   position: sticky;
   top: 84px;
   border: 1px solid var(--line);
   background: var(--paper-2);
   padding: 20px;
+  /* 目录过长时（如长文 40+ 条标题）内部滚动：
+     最高占视口高度减去顶部留白，避免目录占满整个侧栏挡住内容 */
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gray-a) transparent;
+}
+
+.toc::-webkit-scrollbar {
+  width: 6px;
+}
+
+.toc::-webkit-scrollbar-thumb {
+  background: var(--gray-a);
+  border-radius: 3px;
+}
+
+.toc::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .toc h4 {
@@ -1771,6 +1790,20 @@ body.dark .entry:hover .date {
 
 .toc .l2 {
   padding-left: 14px;
+}
+
+/* 正文内作者手写的"文章目录"块（<div class="toc">）：
+   与右侧侧栏目录内容重复，且会命中上方 .toc 的 sticky 规则
+   在滚动时停留在页面上遮挡正文 → 直接隐藏，只保留右侧固定目录 */
+.article-content .toc {
+  display: none;
+}
+
+/* 单栏布局(≤900px)：目录隐藏，只保留右侧固定形式（正文下方的目录会让阅读区变短） */
+@media (max-width: 900px) {
+  .toc {
+    display: none;
+  }
 }
 
 /* 上一篇/下一篇 */
@@ -2120,17 +2153,6 @@ body.dark .entry:hover .date {
 .article-head .a-tags .tag:hover {
   transform: translateY(-2px);
   box-shadow: 2px 2px 0 var(--red);
-}
-
-/* TOC 目录：悬停红色并轻微右移，提示可跳转 */
-.toc a {
-  display: inline-block;
-  transition: color .15s ease, transform .15s ease;
-}
-
-.toc a:hover {
-  color: var(--red);
-  transform: translateX(3px);
 }
 
 /* 相关文章：悬停整体向右滑入 */

@@ -3,6 +3,7 @@ package dao
 import (
 	"blog-system/model"
 	"errors"
+	"fmt"
 	"sort"
 	"time"
 
@@ -34,7 +35,10 @@ func NewArticleDAO() *ArticleDAO {
 	return &ArticleDAO{}
 }
 
-func (d *ArticleDAO) FindPublished(db *gorm.DB, keyword string, authorID uint, tag string, categoryID uint, sortBy string, page, pageSize int) ([]model.Article, int64, error) {
+// FindPublished 已发布文章列表
+// featured=true 时走首页精选：ORDER BY RAND(seed) 随机展示。
+// seed 由前端每次进入页面生成一次：同一次访问内翻页顺序稳定不重叠，每次刷新（新种子）顺序不同。
+func (d *ArticleDAO) FindPublished(db *gorm.DB, keyword string, authorID uint, tag string, categoryID uint, sortBy string, page, pageSize int, featured bool, seed int64) ([]model.Article, int64, error) {
 	var articles []model.Article
 	var total int64
 
@@ -42,6 +46,9 @@ func (d *ArticleDAO) FindPublished(db *gorm.DB, keyword string, authorID uint, t
 	// 前端列表只显示标题/摘要/封面，排除正文能大幅减小响应体积和 Redis 缓存占用。
 	// 正文只在详情接口（FindPublishedByID）返回。
 	query := db.Model(&model.Article{}).Omit("content").Where("status = ?", model.ArticleStatusPublished)
+	if featured {
+		query = query.Where("is_featured = ?", true)
+	}
 	if keyword != "" {
 		query = query.Where("title LIKE ? OR content LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
 	}
@@ -60,6 +67,11 @@ func (d *ArticleDAO) FindPublished(db *gorm.DB, keyword string, authorID uint, t
 	orderBy := "created_at desc"
 	if sortBy == "hot" {
 		orderBy = "view_count desc"
+	}
+	if featured {
+		// 首页精选随机抽取：每次刷新首页展示不同的精选文章（池子=后台勾选 is_featured 的文章）
+		// RAND(seed)：同一种子下顺序确定，保证同一访问内翻页不重叠；seed 每次进入页面都不同
+		orderBy = fmt.Sprintf("RAND(%d)", seed)
 	}
 	query = query.Order(orderBy)
 	query.Count(&total)
