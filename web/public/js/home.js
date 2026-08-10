@@ -111,11 +111,8 @@ function renderFeature(list) {
     return;
   }
   const a = list[0];
-  const title = esc(a.title);
-  // 标题做两行,最后一段压红下划线
-  const len = Math.ceil(title.length / 2);
-  const t1 = title.slice(0, len);
-  const t2 = title.slice(len);
+  const rawTitle = a.title || '';
+  const title = esc(rawTitle);
 
   sec.innerHTML = `
     <div class="feature-label">
@@ -123,8 +120,7 @@ function renderFeature(list) {
       <span class="vol">VOL. 01</span>
     </div>
     <h2 class="feature-title">
-      <span class="ln">${t1}</span>
-      <span class="ln">${t2}<span class="red-line"></span></span>
+      <span class="ln">${title}<span class="red-line"></span></span>
     </h2>
     <div class="feature-foot">
       <div class="feature-meta">
@@ -136,6 +132,15 @@ function renderFeature(list) {
       <a class="feature-link" href="article.html?id=${a.id}">阅读全文 <span class="arrow">→</span></a>
     </div>
   `;
+
+  // 标题能放下就不换行；只有溢出容器才拆两行（最后一段压红下划线）
+  const h2 = sec.querySelector('.feature-title');
+  if (h2 && h2.scrollWidth > h2.clientWidth + 1 && title.length > 1) {
+    const len = Math.ceil(title.length / 2);
+    h2.innerHTML = `
+      <span class="ln">${title.slice(0, len)}</span>
+      <span class="ln">${title.slice(len)}<span class="red-line"></span></span>`;
+  }
 }
 
 function renderDir(list, total) {
