@@ -10,12 +10,14 @@ import (
 	"blog-system/dao"
 	"blog-system/model"
 
+	"golang.org/x/sync/singleflight"
 	"gorm.io/gorm"
 )
 
 type ArticleService struct {
 	dao *dao.ArticleDAO
 	db  *gorm.DB
+	sf  singleflight.Group // 缓存击穿防护：同一文章的并发回源合并为一次 DB 查询
 }
 
 func NewArticleService(dao *dao.ArticleDAO, db *gorm.DB) *ArticleService {
@@ -82,6 +84,7 @@ func (s *ArticleService) GetFeaturedArticles(page, pageSize int, seed int64) ([]
 
 // GetArticleByID 文章详情（公开接口）：私密文章不返回正文，标记 needPassword
 // 缓存策略：详情缓存 5 分钟；阅读量不缓存（读 Redis 实时值覆盖，保证计数即时可见）
+// 并发保护：缓存未命中时用 singleflight 合并回源，防止热点文章瞬时打穿缓存直击 DB
 func (s *ArticleService) GetArticleByID(id uint) (*model.Article, error) {
 	key := cache.KeyArticle + fmt.Sprint(id)
 
@@ -96,19 +99,37 @@ func (s *ArticleService) GetArticleByID(id uint) (*model.Article, error) {
 		return &article, nil
 	}
 
-	// ② 缓存未命中 → 查数据库（只查已发布文章：草稿/待审/驳回不对外）
-	a, err := s.dao.FindPublishedByID(s.db, id)
+	// ② 缓存未命中 → singleflight 合并并发回源（防缓存击穿）
+	// 热点文章瞬时大量请求同时未命中时，只有 1 个请求真正查 DB，其余请求共享结果
+	v, err, _ := s.sf.Do(fmt.Sprint(id), func() (any, error) {
+		// 双检：等待期间可能已有其他请求回填了缓存
+		var cached model.Article
+		if cache.Get(key, &cached) {
+			return &cached, nil
+		}
+		// 查数据库（只查已发布文章：草稿/待审/驳回不对外）
+		a, err := s.dao.FindPublishedByID(s.db, id)
+		if err != nil {
+			return nil, err
+		}
+		// 私密文章：告诉前端"需要密码"，并隐藏正文（未解锁前不泄露）
+		a.NeedPassword = a.Password != ""
+		if a.NeedPassword {
+			a.Content = ""
+		}
+		// ③ 写缓存（文章基本不常变，5 分钟足够）
+		cache.Set(key, a, cache.TTLDetail)
+		return a, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	// 私密文章：告诉前端"需要密码"，并隐藏正文（未解锁前不泄露）
-	a.NeedPassword = a.Password != ""
-	if a.NeedPassword {
-		a.Content = ""
+	article = *(v.(*model.Article))
+	// 阅读量实时化：Redis 里有值就覆盖（没有说明 Redis 刚起步，用缓存里的）
+	if vc := cache.GetViewCount(id); vc >= 0 {
+		article.ViewCount = int(vc)
 	}
-	// ③ 写缓存（文章基本不常变，5 分钟足够）
-	cache.Set(key, a, cache.TTLDetail)
-	return a, nil
+	return &article, nil
 }
 
 func (s *ArticleService) CreateArticle(authorID, categoryID uint, title, content, summary, coverImage, sourceURL, password string, publishAt *time.Time, tagIDs []uint) (*model.Article, error) {
