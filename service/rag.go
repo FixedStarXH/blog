@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"unicode"
 
 	"blog-system/model"
 )
@@ -187,6 +188,88 @@ func (s *AIService) IndexedCount() (int64, error) {
 
 // ----------------------------- 检索 + 生成 -----------------------------
 
+// 降级"全文模式"：服务商不支持 embedding（如 DeepSeek 官方无向量接口）时，
+// 问答跳过向量检索，直接把文章全文交给大模型回答。
+//   - 单篇文章问答（articleID 非 nil）：用该文章正文
+//   - 全局问答（articleID nil）：按问题关键词匹配最相关的 3 篇
+const fullTextMaxRunes = 6000 // 每篇截断字符数（控制 token 与响应速度）
+
+// extractKeywords 从问题中提取关键词：按非字母数字切分，丢弃过短词（单字太泛）
+func extractKeywords(q string) []string {
+	fields := strings.FieldsFunc(q, func(r rune) bool {
+		return !(unicode.IsLetter(r) || unicode.IsDigit(r))
+	})
+	seen := make(map[string]bool)
+	out := make([]string, 0, len(fields))
+	for _, f := range fields {
+		f = strings.TrimSpace(f)
+		if len([]rune(f)) < 2 || seen[f] {
+			continue
+		}
+		seen[f] = true
+		out = append(out, f)
+	}
+	return out
+}
+
+// fullTextContext 全文模式的上下文：单篇用全文；全局按关键词匹配最相关的文章
+func (s *AIService) fullTextContext(ctx context.Context, question string, articleID *uint) (string, error) {
+	if articleID != nil {
+		var a model.Article
+		if err := s.db.Select("id", "title", "content").First(&a, *articleID).Error; err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("【来自文章《%s》】\n%s", a.Title, truncateRunes(stripHTML(a.Content), fullTextMaxRunes)), nil
+	}
+
+	// 全局：关键词命中数决定文章优先级，取 top3
+	kw := extractKeywords(question)
+	var arts []model.Article
+	if err := s.db.Select("id", "title", "content").
+		Where("status = ?", model.ArticleStatusPublished).
+		Find(&arts).Error; err != nil {
+		return "", err
+	}
+	type cand struct {
+		title string
+		text  string
+		score int
+	}
+	var cands []cand
+	for _, a := range arts {
+		text := stripHTML(a.Content)
+		score := 0
+		for _, k := range kw {
+			if strings.Contains(a.Title, k) {
+				score += 3 // 标题命中权重更高
+			}
+			if strings.Contains(text, k) {
+				score++
+			}
+		}
+		if score > 0 {
+			cands = append(cands, cand{a.Title, text, score})
+		}
+	}
+	sort.Slice(cands, func(i, j int) bool { return cands[i].score > cands[j].score })
+	if len(cands) > 3 {
+		cands = cands[:3]
+	}
+	if len(cands) == 0 {
+		return "", fmt.Errorf("没有在文章中找到相关内容，换个问法试试")
+	}
+	parts := make([]string, 0, len(cands))
+	for _, c := range cands {
+		parts = append(parts, fmt.Sprintf("【来自文章《%s》】\n%s", c.title, truncateRunes(c.text, fullTextMaxRunes)))
+	}
+	return strings.Join(parts, "\n\n---\n\n"), nil
+}
+
+// ragSystemPrompt 问答系统提示词（检索模式与全文模式共用）
+func ragSystemPrompt() ChatMessage {
+	return ChatMessage{Role: "system", Content: "你是「Lumi 博客」的 AI 助手。请基于提供的文章内容回答用户问题：\n1. 回答要有依据，优先引用文章内容；\n2. 文章中没有相关内容时明确说'文章中没有相关内容'，不要编造；\n3. 用简洁的中文回答。"}
+}
+
 // topHit 一条检索命中的块（带相似度，用于排序与提示"依据哪篇文章"）
 type topHit struct {
 	Chunk     model.ArticleChunk
@@ -236,10 +319,18 @@ func (s *AIService) AskStream(ctx context.Context, question string, articleID *u
 		return nil, fmt.Errorf("AI 服务未配置（请在 config.yaml 填写 ai.api_key 或设置环境变量 BLOG_AI_API_KEY）")
 	}
 
-	// ① 问题向量化
+	// ① 问题向量化；服务商不支持 embedding（如 DeepSeek 官方无向量接口）时自动降级
 	qVec, err := s.embed(ctx, question)
 	if err != nil {
-		return nil, fmt.Errorf("问题向量化失败: %w", err)
+		// 降级"全文模式"：跳过向量检索，把文章全文交给大模型直接回答
+		contextText, ctxErr := s.fullTextContext(ctx, question, articleID)
+		if ctxErr != nil {
+			return nil, ctxErr
+		}
+		messages := []ChatMessage{ragSystemPrompt()}
+		messages = append(messages, history...)
+		messages = append(messages, ChatMessage{Role: "user", Content: fmt.Sprintf("以下是文章内容：\n\n%s\n\n---\n\n用户问题：%s", contextText, question)})
+		return s.chatCompletion(ctx, messages, 0.3, true)
 	}
 
 	// ② 检索 top-5 相关块
@@ -260,9 +351,7 @@ func (s *AIService) AskStream(ctx context.Context, question string, articleID *u
 	}
 	contextText := strings.Join(contextParts, "\n\n---\n\n")
 
-	messages := []ChatMessage{
-		{Role: "system", Content: "你是「Lumi 博客」的 AI 助手。请基于提供的文章片段回答用户问题：\n1. 回答要有依据，优先引用片段内容；\n2. 片段不足时明确说'文章中没有相关内容'，不要编造；\n3. 用简洁的中文回答。"},
-	}
+	messages := []ChatMessage{ragSystemPrompt()}
 	// ④ 多轮历史（最多 8 条，controller 已限）插在问题之前，保证上下文连贯
 	messages = append(messages, history...)
 	messages = append(messages, ChatMessage{Role: "user", Content: fmt.Sprintf("以下是相关文章片段：\n\n%s\n\n---\n\n用户问题：%s", contextText, question)})
