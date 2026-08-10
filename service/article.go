@@ -83,15 +83,18 @@ func (s *ArticleService) GetFeaturedArticles(page, pageSize int, seed int64) ([]
 }
 
 // GetArticleByID 文章详情（公开接口）：私密文章不返回正文，标记 needPassword
-// 缓存策略：详情缓存 5 分钟；阅读量不缓存（读 Redis 实时值覆盖，保证计数即时可见）
-// 并发保护：缓存未命中时用 singleflight 合并回源，防止热点文章瞬时打穿缓存直击 DB
+// 多级缓存：L1 本地内存 → L2 Redis → DB（singleflight 防击穿）
+//   - L1：单实例部署下热点文章纯进程内命中（~微秒级），完全不过网络
+//   - L2：Redis 命中后回填 L1（下次直接 L1 命中）；多实例共享
+//   - 回源：L2 也未命中 → singleflight 合并并发回源，只打一次 DB
+//
+// 阅读量不缓存（读 Redis 实时值覆盖，保证计数即时可见）
 func (s *ArticleService) GetArticleByID(id uint) (*model.Article, error) {
 	key := cache.KeyArticle + fmt.Sprint(id)
 
-	// ① 读缓存
+	// ① L1 本地内存缓存（最快一跳）
 	var article model.Article
-	if cache.Get(key, &article) {
-		// 私密文章：缓存里已是脱敏内容，直接返回
+	if cache.GetLocal(key, &article) {
 		// 阅读量实时化：Redis 里有值就覆盖（没有说明 Redis 刚起步，用缓存里的）
 		if v := cache.GetViewCount(id); v >= 0 {
 			article.ViewCount = int(v)
@@ -99,10 +102,20 @@ func (s *ArticleService) GetArticleByID(id uint) (*model.Article, error) {
 		return &article, nil
 	}
 
-	// ② 缓存未命中 → singleflight 合并并发回源（防缓存击穿）
+	// ② L2 Redis 缓存（多实例共享；L1 未命中时第二跳）
+	if cache.Get(key, &article) {
+		// 回填 L1：让这个热点数据下一跳直接走本地内存
+		cache.SetLocal(key, &article, cache.TTLDetail)
+		if v := cache.GetViewCount(id); v >= 0 {
+			article.ViewCount = int(v)
+		}
+		return &article, nil
+	}
+
+	// ③ L2 也未命中 → singleflight 合并并发回源（防缓存击穿）
 	// 热点文章瞬时大量请求同时未命中时，只有 1 个请求真正查 DB，其余请求共享结果
 	v, err, _ := s.sf.Do(fmt.Sprint(id), func() (any, error) {
-		// 双检：等待期间可能已有其他请求回填了缓存
+		// 双检：等待期间可能已有其他请求回填了 L2（L1 由命中 L2 的请求回填，无需在此重复）
 		var cached model.Article
 		if cache.Get(key, &cached) {
 			return &cached, nil
@@ -117,8 +130,9 @@ func (s *ArticleService) GetArticleByID(id uint) (*model.Article, error) {
 		if a.NeedPassword {
 			a.Content = ""
 		}
-		// ③ 写缓存（文章基本不常变，5 分钟足够）
+		// ④ 写缓存：L2 + L1 一起写（文章基本不常变，5 分钟足够）
 		cache.Set(key, a, cache.TTLDetail)
+		cache.SetLocal(key, a, cache.TTLDetail)
 		return a, nil
 	})
 	if err != nil {

@@ -135,9 +135,11 @@ const (
 const refreshTokenTTL = 7 * 24 * time.Hour
 
 // InvalidateArticleRelated 文章相关缓存全失效（新建/编辑/删除/审核后调用）
-// 一次清掉：该文章详情 + 所有列表 + 热门 + 归档 + 分类计数 + 标签计数
+// 一次清掉：该文章详情（L1+L2）+ 所有列表 + 热门 + 归档 + 分类计数 + 标签计数
 func InvalidateArticleRelated(articleID uint) {
-	Del(KeyArticle + uintToString(articleID))
+	key := KeyArticle + uintToString(articleID)
+	Del(key)      // L2：Redis
+	DelLocal(key) // L1：本地内存（单实例下立即失效；多实例需升级为 Pub/Sub 广播）
 	DelPrefix(KeyArticleList)
 	Del(KeyHot, KeyArchives, KeyCategories, KeyTags)
 }
