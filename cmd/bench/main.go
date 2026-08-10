@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -50,7 +51,18 @@ func main() {
 		mu      sync.Mutex
 		latency []time.Duration
 	)
-	client := &http.Client{Timeout: 10 * time.Second}
+	// 状态码分布：诊断失败原因（429 限流 / 500 / 超时等）
+	statusCount := make(map[int]int)
+	// 连接池要大：默认 MaxIdleConnsPerHost=2，500 并发会疯狂新建连接，Windows 下 socket 句柄耗尽直接崩
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:        1024,
+			MaxIdleConnsPerHost: 1024,
+			MaxConnsPerHost:     1024,
+			IdleConnTimeout:     90 * time.Second,
+		},
+	}
 
 	worker := func(workerIndex int) {
 		defer wg.Done()
@@ -72,6 +84,9 @@ func main() {
 			cost := time.Since(begin)
 			mu.Lock()
 			latency = append(latency, cost)
+			if err == nil {
+				statusCount[resp.StatusCode]++
+			}
 			mu.Unlock()
 			if err == nil {
 				io.Copy(io.Discard, resp.Body)
@@ -106,6 +121,20 @@ func main() {
 	qps := float64(requests) / elapsed.Seconds()
 
 	fmt.Printf("总请求: %d   成功: %d   失败: %d\n", requests, success.Load(), failed.Load())
+	fmt.Printf("状态码分布: ")
+	// map 遍历顺序不定，先收集再排序，输出稳定
+	codes := make([]int, 0, len(statusCount))
+	for c := range statusCount {
+		codes = append(codes, c)
+	}
+	sort.Ints(codes)
+	for i, c := range codes {
+		if i > 0 {
+			fmt.Printf(", ")
+		}
+		fmt.Printf("%d=%d", c, statusCount[c])
+	}
+	fmt.Println()
 	fmt.Printf("总耗时: %v\n平均延迟: %v\nQPS: %.0f req/s\n",
 		elapsed.Round(time.Millisecond), avg.Round(time.Millisecond), qps)
 }
