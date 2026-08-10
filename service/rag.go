@@ -192,7 +192,12 @@ func (s *AIService) IndexedCount() (int64, error) {
 // 问答跳过向量检索，直接把文章全文交给大模型回答。
 //   - 单篇文章问答（articleID 非 nil）：用该文章正文
 //   - 全局问答（articleID nil）：按问题关键词匹配最相关的 3 篇
-const fullTextMaxRunes = 6000 // 每篇截断字符数（控制 token 与响应速度）
+const (
+	// 全文模式截断上限：DeepSeek V4 支持 1M 上下文，文章正文完整放入也毫无压力，
+	// 不再像早期那样按 6000 字截断（会导致长文后半部分内容缺失，AI 答"没有相关内容"）。
+	fullTextMaxRunes    = 80000 // 单篇文章问答：几乎覆盖全部文章全文
+	fullTextGlobalRunes = 30000 // 全局问答：每篇上限（多篇拼接，控制总 token 与成本）
+)
 
 // extractKeywords 从问题中提取关键词：按非字母数字切分，丢弃过短词（单字太泛）
 func extractKeywords(q string) []string {
@@ -260,7 +265,7 @@ func (s *AIService) fullTextContext(ctx context.Context, question string, articl
 	}
 	parts := make([]string, 0, len(cands))
 	for _, c := range cands {
-		parts = append(parts, fmt.Sprintf("【来自文章《%s》】\n%s", c.title, truncateRunes(c.text, fullTextMaxRunes)))
+		parts = append(parts, fmt.Sprintf("【来自文章《%s》】\n%s", c.title, truncateRunes(c.text, fullTextGlobalRunes)))
 	}
 	return strings.Join(parts, "\n\n---\n\n"), nil
 }

@@ -357,6 +357,35 @@
       color: var(--gray-a, #A9A49B);
     }
 
+    /* 一键复制：悬停 AI 气泡时显示，点击复制整条回答 */
+    .ai-copy-btn {
+      position: absolute;
+      right: 54px;
+      bottom: 4px;
+      border: none;
+      background: none;
+      font-family: var(--mono, Consolas, monospace);
+      font-size: 10px;
+      color: var(--gray-a, #A9A49B);
+      cursor: pointer;
+      padding: 1px 4px;
+      opacity: 0;
+      transition: opacity .15s ease, color .15s ease;
+    }
+
+    .ai-bubble.a:hover .ai-copy-btn {
+      opacity: 1;
+    }
+
+    .ai-copy-btn:hover {
+      color: var(--red, #E53012);
+    }
+
+    .ai-copy-btn.ok {
+      color: #0D9488;
+      opacity: 1;
+    }
+
     .ai-bubble.q {
       background: #0D9488;
       color: #fff;
@@ -813,9 +842,39 @@
         }
         const bubble = el('div', 'ai-bubble ' + role);
         bubble.appendChild(el('p', 'ai-bubble-text', txt));
+        if (role === 'a') {
+          // AI 回复一键复制：悬停显示，点击复制整条回答到剪贴板。
+          // 流式回答会实时更新气泡文本，故点击时从 DOM 读取最新完整内容。
+          const copy = el('button', 'ai-copy-btn', '复制');
+          copy.type = 'button';
+          copy.addEventListener('click', () => {
+            const t = copy.parentElement.querySelector('.ai-bubble-text').textContent;
+            copyText(t, copy);
+          });
+          bubble.appendChild(copy);
+        }
         bubble.appendChild(el('time', '', nowTime()));
         row.appendChild(bubble);
         return row;
+      }
+
+      // 复制 AI 回复到剪贴板（clipboard API 优先，兼容非安全上下文降级 execCommand）
+      async function copyText(txt, btn) {
+        try {
+          await navigator.clipboard.writeText(txt);
+        } catch (e) {
+          const ta = document.createElement('textarea');
+          ta.value = txt;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+        }
+        btn.textContent = '✓ 已复制';
+        btn.classList.add('ok');
+        setTimeout(() => { btn.textContent = '复制'; btn.classList.remove('ok'); }, 1600);
       }
 
       // 欢迎语：会话为空时显示，不存入历史
