@@ -11,6 +11,9 @@ logs/
 docs/
 ui-interaction-effects.md
 
+# AI 对话界面参考稿（本地 UI 设计参考，不上传）
+AiChat.vue
+
 # 编译产物
 *.exe
 *.out
