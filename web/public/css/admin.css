@@ -420,7 +420,60 @@ table.data tr:hover td {
 
 table.data .title-cell {
   font-weight: 600;
-  max-width: 340px;
+}
+
+/* 文章管理表：fixed 布局固定关键列宽，标题列伸缩填满，
+   杜绝表格总宽超出面板导致操作列被横向裁剪 */
+table.data.table-articles {
+  table-layout: fixed;
+}
+
+table.data.table-articles th:nth-child(1) {
+  width: 40px;
+}
+
+/* 复选框 */
+table.data.table-articles th:nth-child(2) {
+  width: 52px;
+}
+
+/* ID */
+table.data.table-articles th:nth-child(8) {
+  width: 100px;
+}
+
+/* 发布时间 */
+table.data.table-articles th:nth-child(9) {
+  width: 168px;
+}
+
+/* 操作列横向 sticky：窗口缩窄出现横向滚动时，操作列始终钉在右侧完整可见 */
+table.data.table-articles th:last-child,
+table.data.table-articles td:last-child {
+  position: sticky;
+  right: 0;
+  background: var(--white);
+  box-shadow: -6px 0 8px -6px rgba(26, 25, 21, .18);
+  z-index: 1;
+}
+
+table.data.table-articles tbody tr:hover td:last-child {
+  background: var(--paper-2);
+}
+
+/* 窄屏：隐藏次要列（ID/发布时间），降低表格最小宽度，操作列不再被挤出可视区 */
+@media (max-width: 560px) {
+
+  table.data.table-articles th:nth-child(2),
+  table.data.table-articles td:nth-child(2),
+  table.data.table-articles th:nth-child(8),
+  table.data.table-articles td:nth-child(8) {
+    display: none;
+  }
+
+  table.data .actions .btn {
+    padding: 3px 6px;
+  }
 }
 
 table.data .ellipsis {
@@ -431,9 +484,16 @@ table.data .ellipsis {
 }
 
 table.data .actions {
-  display: flex;
-  gap: 6px;
   white-space: nowrap;
+}
+
+table.data .actions .btn {
+  padding: 4px 8px;
+  margin-right: 4px;
+}
+
+table.data .actions .btn:last-child {
+  margin-right: 0;
 }
 
 /* 徽标 */
@@ -556,6 +616,49 @@ table.data .actions {
   font-family: Consolas, monospace;
   font-size: 13px;
   line-height: 1.7;
+}
+
+/* Markdown 工具栏：白底描边按钮行 */
+.md-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  padding: 8px;
+  margin-bottom: 10px;
+}
+
+.md-toolbar button {
+  min-width: 32px;
+  padding: 5px 10px;
+  border: 1px solid var(--ink);
+  background: var(--white);
+  color: var(--ink);
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease, transform .15s ease;
+}
+
+.md-toolbar button:hover {
+  background: var(--yellow, #FFE066);
+  transform: translateY(-1px);
+}
+
+.md-toolbar button:active {
+  transform: translateY(0);
+  background: var(--red);
+  color: #fff;
+}
+
+.md-toolbar .md-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--line);
+  margin: 0 2px;
 }
 
 .field .hint {
@@ -796,11 +899,21 @@ table.data .actions {
     width: 60px;
   }
 
+  .sidebar .brand {
+    padding: 20px 19px;
+    justify-content: center;
+  }
+
   .sidebar .brand span:not(.tag),
   .sidebar .nav a span,
-  .sidebar .nav a i,
   .sidebar .user {
     display: none;
+  }
+
+  /* 窄屏只保留序号（<i>），避免导航链接变成空元素导致侧栏"消失" */
+  .sidebar .nav a i {
+    font-size: 13px;
+    color: rgba(246, 244, 240, .65);
   }
 
   .sidebar .nav a {

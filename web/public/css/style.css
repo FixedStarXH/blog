@@ -1696,15 +1696,51 @@ body.dark .entry:hover .date {
   border-radius: 3px;
 }
 
+/* 代码块：mac 风格（顶部红黄绿圆点 + 语言标签 + 深色圆角底） */
 .article-content pre {
-  background: var(--ink);
-  color: var(--paper);
-  padding: 22px;
+  position: relative;
+  background: #0d1117;
+  color: #e6edf3;
+  padding: 44px 18px 18px;
   overflow-x: auto;
   margin: 22px 0;
   font-family: var(--mono);
   font-size: 14px;
   line-height: 1.7;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, .08);
+}
+
+/* 三个圆点（红/黄/绿） */
+.article-content pre::before {
+  content: "";
+  position: absolute;
+  top: 13px;
+  left: 16px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ff5f56;
+  box-shadow: 20px 0 0 #ffbd2e, 40px 0 0 #27c93f;
+}
+
+/* 语言标签（由 JS 写入 data-lang） */
+.article-content pre::after {
+  content: attr(data-lang);
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, .45);
+  letter-spacing: .06em;
+  text-transform: lowercase;
 }
 
 .article-content pre code {
@@ -2182,17 +2218,18 @@ body.dark .entry:hover .date {
   transform: translateX(2px);
 }
 
-/* 代码块复制按钮：默认半透明，悬停才清晰 */
+/* 代码块复制按钮：mac 顶栏右上角，默认半透明，悬停才清晰 */
 .code-copy {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  padding: 4px 10px;
+  top: 9px;
+  right: 12px;
+  padding: 3px 10px;
   font-size: 11px;
   font-family: var(--mono);
   color: rgba(255, 255, 255, .7);
   background: rgba(255, 255, 255, .08);
   border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: 5px;
   cursor: pointer;
   opacity: 0;
   transition: opacity .15s ease, color .15s ease;
@@ -3474,6 +3511,11 @@ body.dark .skeleton::after {
     page-break-inside: avoid;
     white-space: pre-wrap;
     word-wrap: break-word;
+  }
+
+  .article-content pre::before,
+  .article-content pre::after {
+    content: none;
   }
 
   .article-content code {

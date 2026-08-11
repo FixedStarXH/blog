@@ -254,6 +254,11 @@ function highlightCode() {
     }
     document.querySelectorAll('#article-content pre code').forEach(b => {
       try { hljs.highlightElement(b); } catch (e) { }
+      // mac 风格顶栏：把语言写入 pre 的 data-lang（CSS ::after 展示）
+      const pre = b.parentElement;
+      const m = (b.className || '').match(/language-([\w+-]+)/);
+      const lang = m ? m[1] : 'text';
+      if (pre && pre.dataset.lang !== lang) pre.dataset.lang = lang;
     });
     addCopyButtons();
   };

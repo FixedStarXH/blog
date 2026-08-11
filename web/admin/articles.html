@@ -5,7 +5,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>文章管理 — 后台</title>
-  <link rel="stylesheet" href="../css/admin.css?v=13">
+  <link rel="stylesheet" href="../css/admin.css?v=19">
+  <!-- Markdown 解析：保存时把 Markdown 转 HTML -->
+  <script src="../js/marked.min.js"></script>
 </head>
 
 <body>
@@ -46,7 +48,7 @@
 
       <div class="panel">
         <div class="panel-body" style="padding:0;">
-          <table class="data">
+          <table class="data table-articles">
             <thead>
               <tr>
                 <th style="width:40px;"><input type="checkbox" id="check-all" onchange="toggleAll(this)"></th>
@@ -107,11 +109,34 @@
             <input type="text" id="a-coverImage" placeholder="/uploads/2026/08/01/xxx.jpg">
           </div>
           <div class="field full">
-            <label>正文内容(HTML)
+            <label>正文内容(Markdown / HTML)
               <button type="button" class="btn ai-btn" id="btn-ai-polish" onclick="aiPolish(event)"
                 title="AI 润色正文(错别字/语病/表达),流式输出">AI 润色</button>
+              <button type="button" class="btn ai-btn" id="btn-mode-toggle" onclick="toggleEditorMode()"
+                title="切换编辑模式">模式: Markdown</button>
             </label>
-            <textarea id="a-content" required placeholder="<p>支持 HTML,代码块用 &lt;pre&gt;&lt;code&gt;</p>"></textarea>
+            <!-- Markdown 工具栏：插入语法到光标处 -->
+            <div class="md-toolbar" id="md-toolbar">
+              <button type="button" data-s="**" data-e="**" data-ph="粗体文字" title="加粗">B</button>
+              <button type="button" data-s="*" data-e="*" data-ph="斜体文字" title="斜体"><i>I</i></button>
+              <button type="button" data-s="~~" data-e="~~" data-ph="删除线" title="删除线">S</button>
+              <span class="md-sep"></span>
+              <button type="button" data-line="## " data-ph="二级标题" title="二级标题">H2</button>
+              <button type="button" data-line="### " data-ph="三级标题" title="三级标题">H3</button>
+              <span class="md-sep"></span>
+              <button type="button" data-line="- " data-ph="列表项" title="无序列表">• 列表</button>
+              <button type="button" data-line="1. " data-ph="列表项" title="有序列表">1. 列表</button>
+              <button type="button" data-line="> " data-ph="引用内容" title="引用">❝ 引用</button>
+              <span class="md-sep"></span>
+              <button type="button" data-s="`" data-e="`" data-ph="行内代码" title="行内代码">&lt;/&gt;</button>
+              <button type="button" data-block="1" data-ph="go" title="代码块">代码块</button>
+              <span class="md-sep"></span>
+              <button type="button" data-s="[" data-e="](https://)" data-ph="链接文字" title="链接">🔗 链接</button>
+              <button type="button" data-s="![" data-e="](图片地址)" data-ph="图片描述" title="图片">🖼 图片</button>
+              <button type="button" data-line="---" title="分割线">— 分割线</button>
+            </div>
+            <textarea id="a-content" required
+              placeholder="支持 Markdown：**加粗**、*斜体*、`代码`、``` 代码块 ```、# 标题…（保存时自动转为 HTML）"></textarea>
           </div>
           <div class="field">
             <label>标签(ID,逗号分隔)</label>
@@ -255,6 +280,8 @@
       document.getElementById('form-title').textContent = '新建文章';
       document.getElementById('form-modal').style.display = 'block';
       document.getElementById('a-id').value = '';
+      // 新建默认 Markdown 模式
+      if (editorMode !== 'md') toggleEditorMode();
       ['a-title', 'a-summary', 'a-coverImage', 'a-content', 'a-tagIds', 'a-publishAt', 'a-password'].forEach(id => document.getElementById(id).value = '');
       document.getElementById('a-isTop').checked = false;
       document.getElementById('a-isFeatured').checked = false;
@@ -273,6 +300,8 @@
         document.getElementById('a-summary').value = a.summary || '';
         document.getElementById('a-coverImage').value = a.coverImage || '';
         document.getElementById('a-content').value = a.content || '';
+        // 旧文章若是 HTML 源码，自动切 HTML 模式，避免保存时 marked 二次转义
+        if (editorMode !== 'html' && looksLikeHtml(a.content || '')) toggleEditorMode();
         document.getElementById('a-status').value = a.status;
         document.getElementById('a-isTop').checked = !!a.isTop;
         document.getElementById('a-isFeatured').checked = !!a.isFeatured;
@@ -290,6 +319,52 @@
 
     function closeForm() { document.getElementById('form-modal').style.display = 'none'; }
 
+    // ==================== Markdown 编辑器 ====================
+    let editorMode = 'md'; // 'md' = Markdown（保存自动转 HTML），'html' = 原样 HTML
+
+    // 阻止 mousedown 默认行为：点击按钮时正文 textarea 不失焦，光标/选区保持不变，
+    // 避免选区信息丢失导致插入位置错乱
+    document.getElementById('md-toolbar').addEventListener('mousedown', e => e.preventDefault());
+    document.getElementById('md-toolbar').addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      // HTML 模式工具栏禁用：点击给出明确提示，避免"点了没反应"的困惑
+      if (editorMode === 'html') { toast('当前为 HTML 模式，请点击「模式: Markdown」切换后再使用工具栏'); return; }
+      const ta = document.getElementById('a-content');
+      const start = ta.selectionStart, end = ta.selectionEnd;
+      const sel = ta.value.slice(start, end);
+      const ph = btn.dataset.ph || 'text';
+      if (btn.dataset.s) {
+        ta.setRangeText(btn.dataset.s + (sel || ph) + btn.dataset.e, start, end, 'end');
+      } else if (btn.dataset.line) {
+        const lineStart = ta.value.lastIndexOf('\n', start - 1) + 1;
+        ta.setRangeText(btn.dataset.line + (sel || ph), lineStart, end, 'end');
+      } else if (btn.dataset.block) {
+        const inner = sel || '代码';
+        ta.setRangeText('```\n' + inner + '\n```', start, end, 'end');
+      }
+      ta.focus();
+    });
+
+    function toggleEditorMode() {
+      editorMode = editorMode === 'md' ? 'html' : 'md';
+      document.getElementById('btn-mode-toggle').textContent = '模式: ' + (editorMode === 'md' ? 'Markdown' : 'HTML');
+      const tb = document.getElementById('md-toolbar');
+      tb.style.opacity = editorMode === 'md' ? '1' : '.45';
+    }
+
+    function looksLikeHtml(text) {
+      return /<(p|div|pre|h[1-6]|ul|ol|li|table|img|blockquote|code)\b/i.test(text);
+    }
+
+    function renderContent(raw) {
+      if (editorMode === 'html' || looksLikeHtml(raw)) return raw;
+      if (typeof marked !== 'undefined') {
+        try { return marked.parse(raw); } catch (e) { return raw; }
+      }
+      return raw;
+    }
+
     async function saveArticle(e) {
       e.preventDefault();
       const id = document.getElementById('a-id').value;
@@ -297,7 +372,7 @@
         title: document.getElementById('a-title').value.trim(),
         summary: document.getElementById('a-summary').value.trim(),
         coverImage: document.getElementById('a-coverImage').value.trim(),
-        content: document.getElementById('a-content').value,
+        content: renderContent(document.getElementById('a-content').value),
         categoryId: parseInt(document.getElementById('a-categoryId').value),
         status: parseInt(document.getElementById('a-status').value),
         isTop: document.getElementById('a-isTop').checked,
@@ -339,10 +414,12 @@
       const old = btn.textContent;
       btn.disabled = true; btn.textContent = '润色中…';
       const orig = ta.value; // 备份，失败可恢复
-      ta.value = '';
+      let started = false; // 收到首个 AI 结果后才清空原文，防止请求异常时正文丢失
       try {
-        await streamRequest('/api/admin/ai/polish', { content }, d => { ta.value += d; }, () => toast('润色完成，检查后保存'));
-      } catch (e) { ta.value = orig; toast(e.message, true); }
+        await streamRequest('/api/admin/ai/polish', { content },
+          d => { if (!started) { ta.value = ''; started = true; } ta.value += d; },
+          () => toast('润色完成，检查后保存'));
+      } catch (e) { if (started) ta.value = orig; toast(e.message, true); }
       finally { btn.disabled = false; btn.textContent = old; }
     }
 
