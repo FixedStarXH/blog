@@ -70,7 +70,8 @@ func Init(r *gin.Engine) {
 		api.GET("/articles/:id/nav", articleCtl.GetArticleNav)
 		api.POST("/articles/:id/unlock", middleware.RateLimitByIP(5, 10), articleCtl.UnlockArticle) // 私密文章解锁（游客也能试）
 		api.GET("/articles/:id/comments", commentCtl.GetComments)
-		api.POST("/articles/:id/comments", middleware.RateLimitByIP(10, 20), commentCtl.AddComment) // 评论发表限流（防刷屏）
+		// 评论发表限流（防刷屏）+ 可选登录（带 token 识别用户：昵称留空自动用账号名，游客默认"游客"）
+		api.POST("/articles/:id/comments", middleware.RateLimitByIP(10, 20), middleware.OptionalAuth(), commentCtl.AddComment)
 		api.GET("/archives", articleCtl.GetArchives)
 		api.GET("/settings", settingCtl.GetSiteSettings)
 		api.GET("/quote", settingCtl.GetDailyQuote)

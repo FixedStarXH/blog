@@ -3,6 +3,7 @@ package controller
 import (
 	"strconv"
 
+	"blog-system/middleware"
 	"blog-system/service"
 	"blog-system/utils"
 
@@ -58,7 +59,7 @@ func (c *CommentController) AddComment(ctx *gin.Context) {
 		return
 	}
 
-	comment, err := c.service.AddComment(uint(id), req.Content, req.Nickname, req.ParentID)
+	comment, err := c.service.AddComment(uint(id), req.Content, req.Nickname, req.ParentID, middleware.GetUserID(ctx))
 	if err != nil {
 		// 透传 service 的具体错误（如"文章不存在或未发布"），前端能明确提示原因
 		utils.Fail(ctx, err.Error())

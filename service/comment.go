@@ -21,11 +21,34 @@ func NewCommentService(dao *dao.CommentDAO, db *gorm.DB) *CommentService {
 func (s *CommentService) GetComments(articleID uint) ([]model.Comment, error) {
 	return s.dao.FindApprovedByArticleID(s.db, articleID)
 }
-func (s *CommentService) AddComment(articleID uint, content, nickname string, parentID *uint) (*model.Comment, error) {
-	// 免昵称：没填昵称时给默认值"游客"
+
+// AddComment 发表评论（游客可评，不需要登录；登录用户自动识别身份）
+// userID=0 表示游客；userID>0 时昵称留空默认用账号名称（昵称→用户名），并绑定 UserID
+func (s *CommentService) AddComment(articleID uint, content, nickname string, parentID *uint, userID uint) (*model.Comment, error) {
+	comment := &model.Comment{
+		ArticleID: articleID,                   // 所属文章
+		Content:   content,                     // 评论内容
+		Status:    model.CommentStatusApproved, // 免审核：默认通过，直接展示
+		ParentID:  parentID,                    // 楼中楼：nil=顶级评论，有值=回复
+	}
+	// 登录用户：昵称留空默认用账号名称（优先昵称，其次用户名），并绑定 UserID
+	if userID > 0 {
+		var u model.User
+		if err := s.db.Select("nickname", "username").First(&u, userID).Error; err == nil {
+			if nickname == "" {
+				nickname = u.Nickname
+				if nickname == "" {
+					nickname = u.Username
+				}
+			}
+			comment.UserID = &userID
+		}
+	}
+	// 游客兜底：仍是空昵称时给默认值"游客"
 	if nickname == "" {
 		nickname = "游客"
 	}
+	comment.Nickname = nickname
 	// 校验文章存在且已发布（防止对任意 ID 产生孤儿评论）
 	var article model.Article
 	if err := s.db.Select("id").Where("status = ?", model.ArticleStatusPublished).First(&article, articleID).Error; err != nil {
@@ -46,14 +69,6 @@ func (s *CommentService) AddComment(articleID uint, content, nickname string, pa
 		if parent.ArticleID != articleID {
 			return nil, errors.New("被回复的评论不属于这篇文章")
 		}
-	}
-	comment := &model.Comment{
-		ArticleID: articleID,                   // 所属文章
-		Content:   content,                     // 评论内容
-		Nickname:  nickname,                    // 游客昵称（可选，默认"游客"）
-		Status:    model.CommentStatusApproved, // 免审核：默认通过，直接展示
-		ParentID:  parentID,                    // 楼中楼：nil=顶级评论，有值=回复
-		// UserID 不赋值 → nil，表示游客
 	}
 	if err := s.dao.Create(s.db, comment); err != nil {
 		return nil, err

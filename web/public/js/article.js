@@ -184,7 +184,7 @@ function renderArticle() {
       <div class="head"><h3>评论</h3><span class="n" id="comment-total">0 条</span></div>
       <form class="comment-form" id="comment-form" onsubmit="submitComment(event)">
         <div class="row">
-          <input type="text" id="c-name" placeholder="昵称(可选，不填默认游客)" maxlength="20">
+          <input type="text" id="c-name" placeholder="${localStorage.getItem('accessToken') ? '昵称(可选，留空使用账号名)' : '昵称(可选，不填默认游客)'}" maxlength="20">
           <input type="email" id="c-email" placeholder="邮箱(可选)" style="display:none">
         </div>
         <div class="emoji-picker">

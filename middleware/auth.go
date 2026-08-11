@@ -89,6 +89,29 @@ func AuthRequired() gin.HandlerFunc {
 	}
 }
 
+// OptionalAuth 可选登录中间件：带合法 token 就识别用户，否则按游客放行（不拦截）
+//
+// 与 AuthRequired 的区别：AuthRequired 没 token/验签失败 → 401 拦截；
+// OptionalAuth 用于"游客可用，但登录后增强体验"的公开接口（如评论：
+// 登录用户昵称留空时自动用账号名，游客才默认"游客"）。
+// 无效 token 静默降级为游客，不报错——防止"带了个过期 token 就连游客都不让评论"。
+func OptionalAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		auth := c.GetHeader("Authorization")
+		if strings.HasPrefix(auth, "Bearer ") {
+			claims, err := utils.ParseToken(strings.TrimPrefix(auth, "Bearer "), "access")
+			if err == nil {
+				var user model.User
+				if err := model.DB.Select("id", "role", "status").First(&user, claims.UserID).Error; err == nil && user.Status == model.UserStatusActive {
+					c.Set("userID", user.ID)
+					c.Set("role", user.Role)
+				}
+			}
+		}
+		c.Next()
+	}
+}
+
 // RequireRole 角色权限中间件：要求角色 >= minRole 才放行（RBAC）
 //
 // 用法：必须放在 AuthRequired 之后（它要读 context 里的 role），如
