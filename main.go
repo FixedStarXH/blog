@@ -35,6 +35,9 @@ func main() {
 	scheduler.StartPublishScheduler(model.DB)
 	scheduler.StartViewFlushScheduler(model.DB)
 
+	// 生产模式：release 关闭 gin 的 debug 控制台日志与调试开销（高并发性能关键项）
+	gin.SetMode(gin.ReleaseMode)
+
 	// gin.New() 不带默认 logger（我们用 slog），只留 Recovery 兜底防 panic
 	r := gin.New()
 	r.Use(gin.Recovery())
