@@ -135,6 +135,10 @@ function renderArticle() {
   // 字数统计：去掉 HTML 标签后的纯文本字数
   const wordCount = (content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, '').length;
 
+  // CSDN 防盗链：正文所有 <img> 统一加 referrerpolicy="no-referrer"，
+  // 跨域图床请求不带本站 Referer，避免图片被图床防盗链拒绝（本地图不受影响）
+  const bodyHtml = (content || '').replace(/<img(?=[\s>])/gi, '<img referrerpolicy="no-referrer"');
+
   wrap.innerHTML = `
     <div class="article-content-wrap">
       <div class="article-head">
@@ -155,7 +159,7 @@ function renderArticle() {
         ${(a.tags && a.tags.length) ? `<div class="a-tags">${a.tags.map(t => `<a class="tag" href="articles.html?tag=${encodeURIComponent(t.name)}"># ${esc(t.name)}</a>`).join('')}</div>` : ''}
       </div>
 
-      <article class="article-content" id="article-content">${content}</article>
+      <article class="article-content" id="article-content">${bodyHtml}</article>
 
       <div class="pn">
         ${a.prev && a.prev.id ? `<a href="article.html?id=${a.prev.id}"><span class="lbl">← 上一篇</span><span class="t">${esc(a.prev.title)}</span></a>` : '<a style="visibility:hidden"></a>'}
@@ -606,12 +610,47 @@ function setReply(pid, name) {
   ta.placeholder = '回复 ' + name + '…';
 }
 
+// ==================== 评论敏感词即时检测 ====================
+// 词库来自后端 /api/sensitive/words（单一来源，改词只动后端），首次拉取后缓存
+let sensitiveWordsCache = null;
+async function loadSensitiveWords() {
+  if (sensitiveWordsCache) return sensitiveWordsCache;
+  try {
+    const data = await api.get('/api/sensitive/words');
+    sensitiveWordsCache = data.words || [];
+  } catch (e) {
+    sensitiveWordsCache = []; // 接口失败不阻断评论，后端仍会强制过滤
+  }
+  return sensitiveWordsCache;
+}
+
+// 归一化：转小写并去掉所有非字母/数字字符（识别"傻 逼"、"F u c k"等变体）
+function normalizeWord(s) {
+  return s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+}
+
+// 返回命中的敏感词（归一化后匹配），无命中返回 null
+function checkSensitive(text) {
+  if (!text) return null;
+  const t = normalizeWord(text);
+  if (!t || !sensitiveWordsCache) return null;
+  return sensitiveWordsCache.find(w => t.includes(normalizeWord(w))) || null;
+}
+
 async function submitComment(e) {
   e.preventDefault();
   const name = document.getElementById('c-name').value.trim();
   const content = document.getElementById('c-content').value.trim();
   // 昵称非必填：留空时后端默认"游客"；仅校验内容
   if (!content) return toast('评论内容不能为空', true);
+
+  // 敏感词即时检测：命中直接拦截，并提示具体词汇
+  await loadSensitiveWords();
+  const bad = checkSensitive(content) || checkSensitive(name);
+  if (bad) {
+    toast(`评论包含敏感词「${bad}」，请修改后提交`, true);
+    return;
+  }
 
   try {
     await api.post(`/api/articles/${id}/comments`, {

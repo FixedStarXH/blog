@@ -72,6 +72,7 @@ func Init(r *gin.Engine) {
 		api.GET("/articles/:id/comments", commentCtl.GetComments)
 		// 评论发表限流（防刷屏）+ 可选登录（带 token 识别用户：昵称留空自动用账号名，游客默认"游客"）
 		api.POST("/articles/:id/comments", middleware.RateLimitByIP(10, 20), middleware.OptionalAuth(), commentCtl.AddComment)
+		api.GET("/sensitive/words", commentCtl.GetSensitiveWords) // 敏感词库（前端提交评论前即时检测）
 		api.GET("/archives", articleCtl.GetArchives)
 		api.GET("/settings", settingCtl.GetSiteSettings)
 		api.GET("/quote", settingCtl.GetDailyQuote)

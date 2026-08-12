@@ -26,6 +26,12 @@ type addCommentRequest struct {
 	ParentID *uint  `json:"parentId"`                            // 楼中楼：回复哪条评论，nil=顶级评论
 }
 
+// GetSensitiveWords 返回敏感词库（前端提交评论前做即时检测提示，后端仍会强制过滤）
+// GET /api/sensitive/words
+func (c *CommentController) GetSensitiveWords(ctx *gin.Context) {
+	utils.Success(ctx, gin.H{"words": utils.SensitiveWords()})
+}
+
 // GetComments 文章评论列表
 // GET /api/articles/:id/comments
 func (c *CommentController) GetComments(ctx *gin.Context) {

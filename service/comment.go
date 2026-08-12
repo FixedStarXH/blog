@@ -3,6 +3,7 @@ package service
 import (
 	"blog-system/dao"
 	"blog-system/model"
+	"blog-system/utils"
 	"errors"
 
 	"gorm.io/gorm"
@@ -25,6 +26,8 @@ func (s *CommentService) GetComments(articleID uint) ([]model.Comment, error) {
 // AddComment 发表评论（游客可评，不需要登录；登录用户自动识别身份）
 // userID=0 表示游客；userID>0 时昵称留空默认用账号名称（昵称→用户名），并绑定 UserID
 func (s *CommentService) AddComment(articleID uint, content, nickname string, parentID *uint, userID uint) (*model.Comment, error) {
+	// 敏感词过滤：评论内容中的敏感词统一替换为 * 掩码（防广告/辱骂/违规内容）
+	content, _ = utils.FilterSensitive(content)
 	comment := &model.Comment{
 		ArticleID: articleID,                   // 所属文章
 		Content:   content,                     // 评论内容
@@ -48,6 +51,8 @@ func (s *CommentService) AddComment(articleID uint, content, nickname string, pa
 	if nickname == "" {
 		nickname = "游客"
 	}
+	// 昵称最终确定后再过滤一次（登录用户取自账号昵称/用户名，同样需要屏蔽）
+	nickname, _ = utils.FilterSensitive(nickname)
 	comment.Nickname = nickname
 	// 校验文章存在且已发布（防止对任意 ID 产生孤儿评论）
 	var article model.Article
