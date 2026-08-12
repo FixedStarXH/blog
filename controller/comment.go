@@ -74,6 +74,22 @@ func (c *CommentController) AddComment(ctx *gin.Context) {
 	utils.Success(ctx, comment)
 }
 
+// LikeComment 评论点赞（原子自增 +1，返回最新点赞数）
+// PUT /api/articles/:id/comments/:cid/like
+func (c *CommentController) LikeComment(ctx *gin.Context) {
+	cid, err := strconv.ParseUint(ctx.Param("cid"), 10, 64)
+	if err != nil {
+		utils.Fail(ctx, "无效的评论ID")
+		return
+	}
+	count, err := c.service.LikeComment(uint(cid))
+	if err != nil {
+		utils.Fail(ctx, err.Error())
+		return
+	}
+	utils.Success(ctx, gin.H{"likeCount": count})
+}
+
 // GetAdminComments 后台评论列表（编辑+）
 // GET /api/admin/comments?status=0&page=1&pageSize=10
 func (c *CommentController) GetAdminComments(ctx *gin.Context) {

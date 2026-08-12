@@ -20,6 +20,7 @@ type Comment struct {
 	UserID    *uint  `gorm:"index;comment:用户ID" json:"userId"`                // *uint=可空；nil=游客，有值=登录用户
 	Nickname  string `gorm:"size:20;comment:游客昵称" json:"nickname"`            // 游客评论时必填
 	ParentID  *uint  `gorm:"index;comment:父评论ID" json:"parentId"`             // 楼中楼；nil=顶级评论
+	LikeCount int    `gorm:"default:0;comment:点赞数" json:"likeCount"`           // 评论点赞数（原子自增）
 
 	Article Article `gorm:"foreignKey:ArticleID" json:"article,omitempty"` // 关联文章
 	User    *User   `gorm:"foreignKey:UserID" json:"user,omitempty"`       // 关联用户；游客时为 nil

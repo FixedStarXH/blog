@@ -154,6 +154,8 @@ function renderArticle() {
           <span class="sep">·</span>
           <a href="javascript:;" onclick="shareArticle()" class="share-link" title="分享文章">↗ 分享</a>
           <span class="sep">·</span>
+          <a href="javascript:;" onclick="exportMarkdown()" class="share-link" title="导出 Markdown">⎙ MD</a>
+          <span class="sep">·</span>
           <a href="javascript:window.print()" class="share-link" title="打印文章">⎙ 打印</a>
         </div>
         ${(a.tags && a.tags.length) ? `<div class="a-tags">${a.tags.map(t => `<a class="tag" href="articles.html?tag=${encodeURIComponent(t.name)}"># ${esc(t.name)}</a>`).join('')}</div>` : ''}
@@ -436,6 +438,26 @@ async function generateSummary() {
   }
 }
 
+// 导出文章为 Markdown：后端转好格式后前端生成 .md 文件下载
+async function exportMarkdown() {
+  try {
+    const data = await api.get(`/api/articles/${id}/export?format=md`);
+    const blob = new Blob([data.content], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    // Windows 文件名不能含 \ / : * ? " < > |
+    a.href = url;
+    a.download = (data.title || 'article').replace(/[\\/:*?"<>|]/g, '_') + '.md';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast('Markdown 已下载');
+  } catch (e) {
+    toast(e.message || '导出失败', true);
+  }
+}
+
 // 分享文章：优先用 Web Share API（移动端原生分享），回退到复制链接
 async function shareArticle() {
   const url = location.href;
@@ -582,7 +604,10 @@ function renderComments(list) {
         <span class="c-time">${fmtDate(c.createdAt)}</span>
       </div>
       <div class="c-body">${esc(c.content)}</div>
-      <button class="c-reply-btn" data-reply-id="${c.id}" data-reply-name="${esc(c.nickname || '匿名')}">回复</button>
+      <div class="c-actions">
+        <button class="c-reply-btn" data-reply-id="${c.id}" data-reply-name="${esc(c.nickname || '匿名')}">回复</button>
+        <button class="c-like-btn${localStorage.getItem('cliked_' + c.id) ? ' liked' : ''}" data-like-id="${c.id}" title="点赞"><span class="c-heart">${localStorage.getItem('cliked_' + c.id) ? '❤' : '♡'}</span><em>${c.likeCount || 0}</em></button>
+      </div>
       ${reply.filter(r => r.parentId === c.id).map(r => `
         <div class="reply">
           <div class="c-meta">
@@ -590,17 +615,38 @@ function renderComments(list) {
             <span class="c-time">${fmtDate(r.createdAt)}</span>
           </div>
           <div class="c-body">${esc(r.content)}</div>
+          <button class="c-like-btn${localStorage.getItem('cliked_' + r.id) ? ' liked' : ''}" data-like-id="${r.id}" title="点赞"><span class="c-heart">${localStorage.getItem('cliked_' + r.id) ? '❤' : '♡'}</span><em>${r.likeCount || 0}</em></button>
         </div>`).join('')}
     </div>`).join('');
 
-  // 事件委托处理"回复"按钮：不能用 onclick 内联拼 JS 字符串——
+  // 事件委托处理"回复"和"点赞"按钮：不能用 onclick 内联拼 JS 字符串——
   // esc() 转义出的 &#39; 会被 HTML 解析器解码回 '，昵称含引号即可注入脚本（XSS）。
   // data-* 属性由浏览器安全解码，setReply 只把值放进 placeholder，不会执行。
   listEl.onclick = (e) => {
-    const btn = e.target.closest('.c-reply-btn');
-    if (!btn) return;
-    setReply(Number(btn.dataset.replyId), btn.dataset.replyName || '匿名');
+    const replyBtn = e.target.closest('.c-reply-btn');
+    if (replyBtn) {
+      setReply(Number(replyBtn.dataset.replyId), replyBtn.dataset.replyName || '匿名');
+      return;
+    }
+    const likeBtn = e.target.closest('.c-like-btn');
+    if (likeBtn) likeComment(Number(likeBtn.dataset.likeId), likeBtn);
   };
+}
+
+// 评论点赞：localStorage 记录已赞（同一浏览器只能赞一次），后端原子自增 + 限流防刷
+async function likeComment(cid, btn) {
+  if (localStorage.getItem('cliked_' + cid)) return toast('已经点过赞了', true);
+  try {
+    const data = await api.put(`/api/articles/${id}/comments/${cid}/like`);
+    localStorage.setItem('cliked_' + cid, '1');
+    btn.classList.add('liked');
+    const heart = btn.querySelector('.c-heart');
+    if (heart) heart.textContent = '❤';
+    const num = btn.querySelector('em');
+    if (num) num.textContent = data.likeCount;
+  } catch (e) {
+    toast(e.message || '点赞失败', true);
+  }
 }
 
 function setReply(pid, name) {

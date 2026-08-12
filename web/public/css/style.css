@@ -2057,6 +2057,34 @@ body.dark .entry:hover .date {
   color: var(--red);
 }
 
+.comment-item .c-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.comment-item .c-like-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--gray-a);
+  padding: 0;
+  font-family: inherit;
+  transition: color .15s ease;
+}
+
+.comment-item .c-like-btn em {
+  font-style: normal;
+  margin-left: 3px;
+}
+
+.comment-item .c-like-btn:hover,
+.comment-item .c-like-btn.liked {
+  color: var(--red);
+}
+
 .comment-item .reply {
   margin-left: 28px;
   padding-top: 14px;

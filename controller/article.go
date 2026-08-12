@@ -3,6 +3,7 @@ package controller
 import (
 	"blog-system/dao"
 	"blog-system/middleware"
+	"blog-system/model"
 	"blog-system/service"
 	"blog-system/utils"
 	"errors"
@@ -269,6 +270,40 @@ func (c *ArticleController) GetArchives(ctx *gin.Context) {
 		return
 	}
 	utils.Success(ctx, archives)
+}
+
+// ExportArticle 导出文章为 Markdown（公开，仅已发布且非私密文章）
+// GET /api/articles/:id/export?format=md
+func (c *ArticleController) ExportArticle(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
+	if err != nil {
+		utils.Fail(ctx, "无效的文章ID")
+		return
+	}
+	format := ctx.DefaultQuery("format", "md")
+	article, err := c.service.GetArticleByID(uint(id))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			utils.Fail(ctx, "文章不存在")
+		} else {
+			utils.Error(ctx, "获取文章失败")
+		}
+		return
+	}
+	if article.Status != model.ArticleStatusPublished {
+		utils.Fail(ctx, "文章未发布，无法导出")
+		return
+	}
+	if article.Password != "" {
+		utils.Fail(ctx, "私密文章不支持导出")
+		return
+	}
+	switch format {
+	case "md":
+		utils.Success(ctx, gin.H{"title": article.Title, "content": utils.HTMLToMarkdown(article.Content), "format": "md"})
+	default:
+		utils.Fail(ctx, "不支持的导出格式")
+	}
 }
 
 // GetArticleNav 文章导航（上一篇/下一篇/相关推荐）

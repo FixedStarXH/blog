@@ -100,6 +100,24 @@ func (s *CommentService) GetAdminComments(status, page, pageSize int) ([]model.C
 	return comments, total, nil
 }
 
+// LikeComment 评论点赞：先判存在，再原子自增，返回最新点赞数
+func (s *CommentService) LikeComment(id uint) (int, error) {
+	if _, err := s.dao.FindByID(s.db, id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, errors.New("评论不存在")
+		}
+		return 0, err
+	}
+	if err := s.dao.IncrementLike(s.db, id); err != nil {
+		return 0, err
+	}
+	var c model.Comment
+	if err := s.db.Select("like_count").First(&c, id).Error; err != nil {
+		return 0, err
+	}
+	return c.LikeCount, nil
+}
+
 // SetCommentStatus 后台通用改状态（前端 /status 接口：0待审 1通过 2驳回）
 func (s *CommentService) SetCommentStatus(id uint, status int) error {
 	if _, err := s.dao.FindByID(s.db, id); err != nil {

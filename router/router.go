@@ -65,6 +65,7 @@ func Init(r *gin.Engine) {
 		api.GET("/tags", tagCtl.GetTagList)
 		api.GET("/articles/hot", articleCtl.GetHotArticles)
 		api.GET("/articles/:id", articleCtl.GetArticleDetail)
+		api.GET("/articles/:id/export", articleCtl.ExportArticle) // 导出 Markdown（仅已发布公开文章）
 		api.PUT("/articles/:id/view", articleCtl.AddView)
 		api.PUT("/articles/:id/like", articleCtl.Like)
 		api.GET("/articles/:id/nav", articleCtl.GetArticleNav)
@@ -73,6 +74,8 @@ func Init(r *gin.Engine) {
 		// 评论发表限流（防刷屏）+ 可选登录（带 token 识别用户：昵称留空自动用账号名，游客默认"游客"）
 		api.POST("/articles/:id/comments", middleware.RateLimitByIP(10, 20), middleware.OptionalAuth(), commentCtl.AddComment)
 		api.GET("/sensitive/words", commentCtl.GetSensitiveWords) // 敏感词库（前端提交评论前即时检测）
+		// 评论点赞（原子自增 +1；IP 限流防刷屏）
+		api.PUT("/articles/:id/comments/:cid/like", middleware.RateLimitByIP(10, 20), commentCtl.LikeComment)
 		api.GET("/archives", articleCtl.GetArchives)
 		api.GET("/settings", settingCtl.GetSiteSettings)
 		api.GET("/quote", settingCtl.GetDailyQuote)

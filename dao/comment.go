@@ -64,6 +64,13 @@ func (d *CommentDAO) UpdateStatus(db *gorm.DB, id uint, status int) error {
 		Update("status", status).Error
 }
 
+// IncrementLike 评论点赞 +1（原子自增，避免并发下覆盖）
+func (d *CommentDAO) IncrementLike(db *gorm.DB, id uint) error {
+	return db.Model(&model.Comment{}).
+		Where("id = ?", id).
+		UpdateColumn("like_count", gorm.Expr("like_count + 1")).Error
+}
+
 // Delete 删除评论（软删除：BaseModel 自带 DeletedAt，行没被删只是标记）
 func (d *CommentDAO) Delete(db *gorm.DB, id uint) error {
 	return db.Delete(&model.Comment{}, id).Error
