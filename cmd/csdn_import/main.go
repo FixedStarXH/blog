@@ -5,6 +5,8 @@
 //     通过后台接口以指定账号身份批量导入本站。
 //  2. 搜索模式：-search "关键词" 从 CSDN 搜索 API 按关键词找全网文章导入，
 //     用于补齐本站缺失的分类/标签（如 泛型/IO/爬虫/CSS）。
+//  3. 图片本地化：导入前把正文里的外链图（http 开头的 img src）逐张下载，
+//     通过本站 /api/upload 上传到 /uploads 并替换正文 URL，文章从此不依赖 CSDN 图床。
 //
 // 常用参数：
 //
@@ -17,6 +19,8 @@
 //  1. 反爬三件套：浏览器 User-Agent + Referer + 请求间隔（time.Sleep）
 //  2. 正则适合"提 ID / 提纯文本"，正文这种嵌套 HTML 必须用解析器（x/net/html）
 //  3. 幂等：导入前先拉已有标题，标题重复就跳过（脚本可安全重复跑）
+//  4. 外链图本地化：正则只替换 img 的 src 值（最小侵入，不动正文其他 HTML），
+//     下载失败/超 5MB 的图保持外链原样，不阻塞整篇导入
 package main
 
 import (
@@ -25,8 +29,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -70,6 +76,17 @@ var (
 	reDate = regexp.MustCompile(`<span class="date">([^<]+)</span>`)
 	// 详情页：标题
 	reTitle = regexp.MustCompile(`(?s)<h1[^>]*class="title-article"[^>]*>(.*?)</h1>`)
+	// 正文 img 标签的图片地址（src 与 data-src 都处理：懒加载图常把真实地址放 data-src）
+	// 捕获组 1=`src="`  2=图片 URL  3=`"`，替换时只动 URL，正文其他 HTML 原样保留
+	reImgSrc     = regexp.MustCompile(`(?i)(<img\b[^>]*?\bsrc=")([^"]+)(["])`)
+	reImgDataSrc = regexp.MustCompile(`(?i)(<img\b[^>]*?\bdata-src=")([^"]+)(["])`)
+	// 上传接口白名单外的扩展名：CSDN 图 URL 常见 .png/.webp/.gif/.jpg，少见无扩展名的
+	extFromMIME = map[string]string{
+		"image/jpeg": ".jpg",
+		"image/png":  ".png",
+		"image/gif":  ".gif",
+		"image/webp": ".webp",
+	}
 )
 
 // articleMeta 一篇文章的信息（正文在详情页，标题也从详情页取，保证一致）
@@ -415,6 +432,170 @@ func existingTitles(token string) (map[string]bool, error) {
 	return set, nil
 }
 
+// ==================== 图片本地化（外链图 → 本站 /uploads） ====================
+
+// localizeImages 把正文里所有 http(s) 外链图下载并上传到本站，替换 img src。
+// 返回处理后的正文 + 成功/失败张数。失败的图保持外链原样，不阻塞整篇导入。
+// 设计点：
+//  1. 只替换 img 的 src 值（正则），不重渲染整个正文 —— 用 x/net/html 解析再序列化
+//     会把标签属性顺序/实体编码等规范化，正文里 pre/code 可能被改样，风险大；
+//  2. 同一 URL 只下载一次（found 缓存），文章内重复引用同一图不会重复传；
+//  3. 已有 /uploads/ 相对路径或 data: 内嵌图不动（本来就在本地）。
+func localizeImages(token, content string) (string, int, int) {
+	if token == "" || content == "" {
+		return content, 0, 0
+	}
+	var done, failed int
+	found := map[string]string{} // 原 URL → 本地 URL；"" 表示"下载过但失败了"
+	process := func(re *regexp.Regexp) {
+		content = re.ReplaceAllStringFunc(content, func(m string) string {
+			sub := re.FindStringSubmatch(m)
+			if len(sub) != 4 {
+				return m
+			}
+			origURL := sub[2]
+			// 只处理 http(s) 外链；本地相对路径(/uploads/…)与 data: 内嵌图跳过
+			if !strings.HasPrefix(origURL, "http://") && !strings.HasPrefix(origURL, "https://") {
+				return m
+			}
+			local, cached := found[origURL]
+			if !cached {
+				img, err := downloadImage(origURL)
+				if err != nil {
+					fmt.Printf("        [图] 下载失败 %s: %v\n", shortURL(origURL), err)
+					failed++
+					found[origURL] = "" // 记失败，同 URL 不再重试
+					return m
+				}
+				u, err := uploadImage(token, imgFilename(origURL, img), img)
+				if err != nil {
+					fmt.Printf("        [图] 上传失败 %s: %v\n", shortURL(origURL), err)
+					failed++
+					found[origURL] = ""
+					return m
+				}
+				local = u
+				done++
+				fmt.Printf("        [图] %s → %s\n", shortURL(origURL), u)
+				found[origURL] = u
+			} else if local == "" {
+				return m // 之前失败过，保持外链
+			}
+			return sub[1] + local + sub[3]
+		})
+	}
+	// data-src 先处理：CSDN 懒加载图 src 是占位 1x1 图，data-src 才是真图地址
+	process(reImgDataSrc)
+	process(reImgSrc)
+	return content, done, failed
+}
+
+// shortURL 截短 URL 只留路径最后一段，日志更易读
+func shortURL(u string) string {
+	if p, err := url.Parse(u); err == nil && p.Path != "" {
+		return filepath.Base(p.Path)
+	}
+	return u
+}
+
+// downloadImage 下载图片字节（带浏览器 UA + CSDN Referer，过图床防盗链；超 5MB 跳过）
+func downloadImage(imageURL string) ([]byte, error) {
+	req, err := http.NewRequest("GET", imageURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Referer", "https://blog.csdn.net/")
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	if resp.ContentLength > 5<<20 { // 上传接口限 5MB，超了直接跳过（Content-Length 提前判断，省流量）
+		return nil, fmt.Errorf("超过 5MB(%d bytes)", resp.ContentLength)
+	}
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > 5<<20 {
+		return nil, fmt.Errorf("超过 5MB(%d bytes)", len(b))
+	}
+	return b, nil
+}
+
+// imgFilename 拼上传用的原始文件名：URL 路径最后一段做文件名，
+// 没有扩展名或扩展名不在白名单时按文件头(MIME)推断补一个（上传接口按扩展名+内容双重校验）
+func imgFilename(imageURL string, data []byte) string {
+	name := "image"
+	if u, err := url.Parse(imageURL); err == nil && u.Path != "" {
+		name = filepath.Base(u.Path)
+		if i := strings.IndexByte(name, '?'); i >= 0 {
+			name = name[:i]
+		}
+		if name == "" || name == "." || name == "/" {
+			name = "image"
+		}
+	}
+	ext := strings.ToLower(filepath.Ext(name))
+	if ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".webp" {
+		return name
+	}
+	// 无合法扩展名：按内容推断（http.DetectContentType 按 magic number 识别真实图片类型）
+	head := data
+	if len(head) > 512 {
+		head = head[:512]
+	}
+	if e, ok := extFromMIME[http.DetectContentType(head)]; ok {
+		return name + e
+	}
+	return name // 未知类型交给后端拒绝，保持外链
+}
+
+// uploadImage 把图片字节以 form-data 方式上传到本站 /api/upload，返回访问 URL
+func uploadImage(token, filename string, data []byte) (string, error) {
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	fw, err := w.CreateFormFile("file", filename)
+	if err != nil {
+		return "", err
+	}
+	if _, err := fw.Write(data); err != nil {
+		return "", err
+	}
+	if err := w.Close(); err != nil {
+		return "", err
+	}
+	req, err := http.NewRequest("POST", *baseURL+"/api/upload", &buf)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	var r struct {
+		Code int    `json:"code"`
+		Msg  string `json:"message"`
+		Data struct {
+			URL string `json:"url"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+		return "", err
+	}
+	if r.Code != 200 {
+		return "", fmt.Errorf("上传失败(%d): %s", r.Code, r.Msg)
+	}
+	return r.Data.URL, nil
+}
+
 // importArticle 通过后台接口导入一篇文章（status=1 直接发布）
 // author 用于拼 CSDN 原文地址（裂图兜底跳转用）：列表模式 = 默认用户，搜索模式 = 原作者
 func importArticle(token string, m articleMeta, title, content string) error {
@@ -580,7 +761,12 @@ func importLoop(token string, exists map[string]bool, metas []articleMeta, listM
 			fmt.Printf("        - 已存在，跳过\n")
 			skipped++
 		} else {
-			if err := importArticle(token, m, title, content); err != nil {
+			// 图片本地化：正文外链图下载到本站 /uploads 并替换 URL（失败保持外链，不阻塞导入）
+			localized, imgDone, imgFailed := localizeImages(token, content)
+			if imgDone > 0 || imgFailed > 0 {
+				fmt.Printf("        图片本地化: %d 张成功, %d 张失败(保持外链)\n", imgDone, imgFailed)
+			}
+			if err := importArticle(token, m, title, localized); err != nil {
 				fmt.Printf("        - %v\n", err)
 				failed++
 			} else {
