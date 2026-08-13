@@ -2042,6 +2042,103 @@ body.dark .entry:hover .date {
   line-height: 1.7;
 }
 
+/* 评论 Markdown 渲染样式：内联元素紧凑排版，不抢正文风头 */
+.comment-item .c-body p {
+  margin: 0 0 8px;
+}
+
+.comment-item .c-body p:last-child {
+  margin-bottom: 0;
+}
+
+.comment-item .c-body a {
+  color: var(--teal);
+  border-bottom: 1px solid var(--teal);
+}
+
+.comment-item .c-body a:hover {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.comment-item .c-body code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.comment-item .c-body pre {
+  background: #1A1915;
+  border: 1px solid var(--ink);
+  padding: 12px 14px;
+  margin: 10px 0;
+  overflow-x: auto;
+  border-radius: 4px;
+}
+
+.comment-item .c-body pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #EFEBE3;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.comment-item .c-body ul,
+.comment-item .c-body ol {
+  margin: 0 0 8px;
+  padding-left: 22px;
+}
+
+.comment-item .c-body blockquote {
+  margin: 8px 0;
+  padding: 4px 14px;
+  border-left: 3px solid var(--red);
+  background: var(--red-bg);
+  color: var(--gray-6);
+}
+
+.comment-item .c-body img {
+  max-width: 100%;
+  border: 1px solid var(--line);
+  margin: 6px 0;
+}
+
+.comment-item .c-body table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+.comment-item .c-body th,
+.comment-item .c-body td {
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+}
+
+.comment-item .c-body th {
+  background: var(--paper-2);
+  font-weight: 700;
+}
+
+/* 楼中楼"回复 @xxx"标签：青绿徽标，一眼看出回复对象 */
+.comment-item .c-reply-to {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 600;
+  color: #0D9488;
+  background: rgba(13, 148, 136, .1);
+  border: 1px solid rgba(13, 148, 136, .35);
+  border-radius: 3px;
+  padding: 1px 6px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
 .comment-item .c-reply-btn {
   background: none;
   border: none;

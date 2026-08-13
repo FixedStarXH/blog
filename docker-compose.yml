@@ -10,6 +10,8 @@ services:
   mysql:
     image: mysql:8.0
     container_name: blog-mysql
+    # 2C2G 小内存服务器优化：关掉 performance_schema 并调小 buffer pool，省出几百 MB 内存
+    command: ["mysqld", "--performance-schema=OFF", "--innodb-buffer-pool-size=128M"]
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: "123456"

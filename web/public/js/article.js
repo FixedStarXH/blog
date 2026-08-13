@@ -136,8 +136,9 @@ function renderArticle() {
   const wordCount = (content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, '').length;
 
   // CSDN 防盗链：正文所有 <img> 统一加 referrerpolicy="no-referrer"，
-  // 跨域图床请求不带本站 Referer，避免图片被图床防盗链拒绝（本地图不受影响）
-  const bodyHtml = (content || '').replace(/<img(?=[\s>])/gi, '<img referrerpolicy="no-referrer"');
+  // 跨域图床请求不带本站 Referer，避免图片被图床防盗链拒绝（本地图不受影响）。
+  // 懒加载：loading="lazy"（浏览器原生，视口内才加载）+ decoding="async"（异步解码不阻塞渲染）
+  const bodyHtml = (content || '').replace(/<img(?=[\s>])/gi, '<img loading="lazy" decoding="async" referrerpolicy="no-referrer"');
 
   wrap.innerHTML = `
     <div class="article-content-wrap">
@@ -596,6 +597,10 @@ function renderComments(list) {
   const top = list.filter(c => !c.parentId);
   const reply = list.filter(c => c.parentId);
 
+  // id → 昵称 映射：楼中楼显示"回复 @xxx"需要查父评论的昵称
+  const nameMap = {};
+  list.forEach(c => { nameMap[c.id] = c.nickname || '匿名'; });
+
   listEl.innerHTML = top.map((c, idx) => `
     <div class="comment-item">
       <div class="c-meta">
@@ -603,7 +608,7 @@ function renderComments(list) {
         <span class="c-name">${esc(c.nickname || '匿名')}</span>
         <span class="c-time">${fmtDate(c.createdAt)}</span>
       </div>
-      <div class="c-body">${esc(c.content)}</div>
+      <div class="c-body">${renderCommentText(c.content)}</div>
       <div class="c-actions">
         <button class="c-reply-btn" data-reply-id="${c.id}" data-reply-name="${esc(c.nickname || '匿名')}">回复</button>
         <button class="c-like-btn${localStorage.getItem('cliked_' + c.id) ? ' liked' : ''}" data-like-id="${c.id}" title="点赞"><span class="c-heart">${localStorage.getItem('cliked_' + c.id) ? '❤' : '♡'}</span><em>${c.likeCount || 0}</em></button>
@@ -611,13 +616,21 @@ function renderComments(list) {
       ${reply.filter(r => r.parentId === c.id).map(r => `
         <div class="reply">
           <div class="c-meta">
-            <span class="c-name">${esc(r.nickname || '匿名')}</span>
+            <span class="c-name">${esc(r.nickname || '匿名')}<em class="c-reply-to">回复 @${esc(nameMap[r.parentId] || '')}</em></span>
             <span class="c-time">${fmtDate(r.createdAt)}</span>
           </div>
-          <div class="c-body">${esc(r.content)}</div>
+          <div class="c-body">${renderCommentText(r.content)}</div>
           <button class="c-like-btn${localStorage.getItem('cliked_' + r.id) ? ' liked' : ''}" data-like-id="${r.id}" title="点赞"><span class="c-heart">${localStorage.getItem('cliked_' + r.id) ? '❤' : '♡'}</span><em>${r.likeCount || 0}</em></button>
         </div>`).join('')}
     </div>`).join('');
+
+  // Markdown 渲染后的链接安全：一律新窗口打开 + noopener，防 window.opener 钓鱼
+  listEl.querySelectorAll('a').forEach(a => {
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+  });
+  // 评论中的代码块交给 highlight.js 高亮（与正文一致）
+  if (window.hljs) listEl.querySelectorAll('pre code').forEach(hljs.highlightElement);
 
   // 事件委托处理"回复"和"点赞"按钮：不能用 onclick 内联拼 JS 字符串——
   // esc() 转义出的 &#39; 会被 HTML 解析器解码回 '，昵称含引号即可注入脚本（XSS）。
@@ -631,6 +644,19 @@ function renderComments(list) {
     const likeBtn = e.target.closest('.c-like-btn');
     if (likeBtn) likeComment(Number(likeBtn.dataset.likeId), likeBtn);
   };
+}
+
+// 评论 Markdown 渲染：先 esc 转义再交给 marked 解析（防 XSS 的关键）
+// esc 把 < > & 变成 &lt; &gt; &amp;，marked 不会把它们还原成 HTML 标签，
+// 注入的 <script>/<img onerror> 全部失效；而 **粗体**、`代码`、链接、列表正常渲染
+function renderCommentText(text) {
+  if (!text) return '';
+  if (!window.marked) return esc(text); // marked 未加载（如离线）时退回纯文本
+  try {
+    return marked.parse(esc(text), { breaks: true, gfm: true });
+  } catch (e) {
+    return esc(text);
+  }
 }
 
 // 评论点赞：localStorage 记录已赞（同一浏览器只能赞一次），后端原子自增 + 限流防刷
@@ -654,6 +680,12 @@ function setReply(pid, name) {
   const ta = document.getElementById('c-content');
   ta.focus();
   ta.placeholder = '回复 ' + name + '…';
+  // 输入框为空时自动填入 "@昵称 "，让回复目标显式可见（用户可删掉前缀，parentId 仍生效）
+  if (!ta.value.trim()) {
+    ta.value = '@' + name + ' ';
+    const len = ta.value.length;
+    ta.setSelectionRange(len, len); // 光标移到末尾，直接开始打字
+  }
 }
 
 // ==================== 评论敏感词即时检测 ====================

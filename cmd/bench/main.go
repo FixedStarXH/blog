@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -27,6 +28,8 @@ func main() {
 	concurrency := flag.Int("n", 200, "并发数")
 	articleID := flag.Int("id", 1, "文章 ID")
 	total := flag.Int("total", 1, "每个并发发送的请求次数")
+	method := flag.String("method", "GET", "请求方法 (GET/PUT)")
+	path := flag.String("path", "/api/articles/{id}", "请求路径模板，{id} 替换为文章 ID")
 	flush := flag.Bool("flush", false, "压测前删除该文章详情缓存（模拟缓存穿透）")
 	xff := flag.Bool("xff", false, "模拟多 IP（每个并发用独立 X-Forwarded-For），绕过单 IP 限流测真实性能")
 	flag.Parse()
@@ -39,9 +42,9 @@ func main() {
 	}
 
 	reqPerWorker := *total
-	target := fmt.Sprintf("%s/api/articles/%d", *url, *articleID)
-	fmt.Printf("压测目标: GET %s\n并发: %d  每个并发 %d 次 = 总请求 %d\n\n",
-		target, *concurrency, reqPerWorker, *concurrency*reqPerWorker)
+	target := *url + strings.ReplaceAll(*path, "{id}", fmt.Sprintf("%d", *articleID))
+	fmt.Printf("压测目标: %s %s\n并发: %d  每个并发 %d 次 = 总请求 %d\n\n",
+		*method, target, *concurrency, reqPerWorker, *concurrency*reqPerWorker)
 
 	var (
 		success atomic.Int64
@@ -69,17 +72,13 @@ func main() {
 		for i := 0; i < reqPerWorker; i++ {
 			begin := time.Now()
 
-			var resp *http.Response
-			var err error
+			req, _ := http.NewRequest(*method, target, nil)
 			if *xff {
 				// 模拟多 IP：每个并发用独立 X-Forwarded-For，绕过单 IP 限流测真实性能
-				req, _ := http.NewRequest(http.MethodGet, target, nil)
 				ip := fmt.Sprintf("10.%d.%d.%d", (workerIndex>>16)&0xFF, (workerIndex>>8)&0xFF, workerIndex&0xFF)
 				req.Header.Set("X-Forwarded-For", ip)
-				resp, err = client.Do(req)
-			} else {
-				resp, err = client.Get(target)
 			}
+			resp, err := client.Do(req)
 
 			cost := time.Since(begin)
 			mu.Lock()
