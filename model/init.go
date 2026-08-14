@@ -48,6 +48,7 @@ func InitDB() error {
 		&Link{},
 		&Setting{},
 		&ArticleChunk{},
+		&AuditLog{},
 	); err != nil {
 		return fmt.Errorf("自动迁移失败:%w", err)
 	}

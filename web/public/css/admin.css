@@ -291,6 +291,13 @@ img {
   min-width: 200px;
 }
 
+/* 工具栏右侧的灰色说明文字（如审计页"记录后台所有写操作…"） */
+.toolbar-hint {
+  margin-right: auto;
+  font-size: 12px;
+  color: var(--gray, #777);
+}
+
 /* 按钮 */
 .btn {
   display: inline-flex;

@@ -2,6 +2,7 @@ package router
 
 import (
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,6 +55,8 @@ func Init(r *gin.Engine) {
 	rssCtl := controller.NewRSSController(articleSvc, settingSvc)
 	aiSvc := service.NewAIService(model.DB)
 	aiCtl := controller.NewAIController(aiSvc)
+	auditSvc := service.NewAuditService(model.DB)
+	auditCtl := controller.NewAuditController(auditSvc)
 
 	api := r.Group("/api")
 	{
@@ -93,15 +96,16 @@ func Init(r *gin.Engine) {
 
 		// 阶段三：用户体系
 		// 注册/登录不需要登录；注册限流防批量注册垃圾账号（与登录同级别：5/秒、突发 10）
-		api.POST("/auth/register", middleware.RateLimitByIP(5, 10), authCtl.Register)
+		// LoginAudit：认证尝试全记录（谁/成功失败/IP），防暴力破解留痕
+		api.POST("/auth/register", middleware.RateLimitByIP(5, 10), middleware.LoginAudit(), authCtl.Register)
 		// 登录接口严格限流（防暴力破解密码：5/秒、突发 10，按 IP 维度）
-		api.POST("/auth/login", middleware.RateLimitByIP(5, 10), authCtl.Login)
+		api.POST("/auth/login", middleware.RateLimitByIP(5, 10), middleware.LoginAudit(), authCtl.Login)
 		// 刷新双 token（access 过期后用 refresh 换新；限流防暴力遍历 refresh token）
 		api.POST("/auth/refresh", middleware.RateLimitByIP(10, 20), authCtl.Refresh)
 		// 退出登录（吊销 refresh token）
-		api.POST("/auth/logout", authCtl.Logout)
+		api.POST("/auth/logout", middleware.LoginAudit(), authCtl.Logout)
 		// 后台登录（前端 admin/login.html 契约；编辑+ 才能进后台，角色校验在 handler 内）
-		api.POST("/admin/login", middleware.RateLimitByIP(5, 10), authCtl.AdminLogin)
+		api.POST("/admin/login", middleware.RateLimitByIP(5, 10), middleware.LoginAudit(), authCtl.AdminLogin)
 
 		// 以下接口需要先登录（AuthRequired 解析 token 后，handler 用 GetUserID 取身份）
 		authed := api.Group("", middleware.AuthRequired())
@@ -123,6 +127,9 @@ func Init(r *gin.Engine) {
 
 		// 后台管理组：编辑及以上（RBAC 双锁：先登录 401，再验角色 403）
 		admin := api.Group("/admin", middleware.AuthRequired(), middleware.RequireRole(model.RoleEditor))
+		// 操作审计（AdminAudit）：挂在整组，自动记录所有写操作（新建/修改/删除/审核），
+		// 谁在什么时候做了什么、成功失败、来源 IP 全落库，后台可查（见 admin/audit.html）
+		admin.Use(middleware.AdminAudit())
 		admin.GET("/articles", articleCtl.GetAdminArticles)
 		admin.PUT("/articles/:id/approve", articleCtl.ApproveArticle)
 		admin.PUT("/articles/:id/reject", articleCtl.RejectArticle)
@@ -135,6 +142,8 @@ func Init(r *gin.Engine) {
 		admin.POST("/articles/batch", articleCtl.BatchArticleOp)
 		// 仪表盘统计（编辑+）
 		admin.GET("/dashboard", dashboardCtl.GetDashboard)
+		// 仪表盘：浏览量趋势（编辑+，近 N 天折线图）
+		admin.GET("/dashboard/views-trend", dashboardCtl.GetViewsTrend)
 		// 后台分类下拉（前端 admin/articles.html 用 id/name 填充下拉框）
 		admin.GET("/categories", categoryCtl.GetCategoryList)
 		// 站点设置（编辑+）：GET 回显 + PUT 保存
@@ -176,6 +185,17 @@ func Init(r *gin.Engine) {
 		admin.POST("/ai/index/:id", aiCtl.IndexArticle)
 		admin.POST("/ai/index-all", aiCtl.IndexAll)
 		admin.GET("/ai/index-status", aiCtl.IndexStatus)
+		// 操作审计日志（编辑+ 可查，管理员可清空）
+		admin.GET("/audit-logs", auditCtl.GetAuditLogs)
+		admin.DELETE("/audit-logs", middleware.RequireRole(model.RoleAdmin), auditCtl.ClearAuditLogs)
+		// 性能分析 pprof（仅管理员，生产环境可安全查看内存/CPU profile）
+		// 用法：go tool pprof http://<host>/api/admin/debug/pprof/heap
+		adminDebug := admin.Group("/debug/pprof", middleware.RequireRole(model.RoleAdmin))
+		adminDebug.GET("/*any", func(c *gin.Context) {
+			// pprof.Index 按 /debug/pprof/<name> 解析 profile 名，这里把前缀重写回去
+			c.Request.URL.Path = "/debug/pprof" + c.Param("any")
+			pprof.Index(c.Writer, c.Request)
+		})
 	}
 
 	// 前端构建产物托管(dist/ 目录，由 web/ Vite 工程构建生成，源文件在 web/)

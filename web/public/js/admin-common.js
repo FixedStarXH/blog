@@ -25,7 +25,8 @@ function renderSidebar(active) {
     { key: 'comments', href: 'comments.html', i: '05', icon: '✎', name: '评论管理' },
     { key: 'images', href: 'images.html', i: '06', icon: '▨', name: '图库上传' },
     { key: 'links', href: 'links.html', i: '07', icon: '↗', name: '友情链接' },
-    { key: 'settings', href: 'settings.html', i: '08', icon: '⚙', name: '站点设置' },
+    { key: 'audit', href: 'audit.html', i: '08', icon: '≡', name: '审计日志' },
+    { key: 'settings', href: 'settings.html', i: '09', icon: '⚙', name: '站点设置' },
   ];
   const admin = getAdmin();
   document.getElementById('sidebar').innerHTML = `

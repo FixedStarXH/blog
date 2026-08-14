@@ -13,6 +13,7 @@ const pages = [
   'admin/login.html', 'admin/dashboard.html', 'admin/articles.html',
   'admin/categories.html', 'admin/tags.html', 'admin/comments.html',
   'admin/images.html', 'admin/links.html', 'admin/settings.html',
+  'admin/audit.html',
 ]
 
 const input = {}

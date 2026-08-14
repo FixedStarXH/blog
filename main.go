@@ -1,8 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"blog-system/cache"
 	"blog-system/config"
@@ -53,6 +59,28 @@ func main() {
 	router.Init(r)
 
 	addr := fmt.Sprintf(":%d", config.AppConfig.Server.Port)
+
+	// 优雅退出：把 ListenAndServe 放到 goroutine，主协程等信号。
+	// 收到 Ctrl+C(SIGINT) 或 docker stop(SIGTERM) 后：
+	//   ① 停止接收新连接  ② 等待正在处理的请求最多 10 秒  ③ 退出
+	// 否则强制 kill 会导致正在写的请求被中断、数据不一致。
+	srv := &http.Server{Addr: addr, Handler: r}
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("服务启动失败:%v", err)
+		}
+	}()
 	fmt.Printf("服务启动在http://localhost%s\n", addr)
-	r.Run(addr)
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	fmt.Println("收到退出信号，正在优雅关闭…")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("优雅关闭失败:%v", err)
+	}
+	fmt.Println("服务已安全退出")
 }

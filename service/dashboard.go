@@ -1,6 +1,8 @@
 package service
 
 import (
+	"time"
+
 	"blog-system/model"
 
 	"gorm.io/gorm"
@@ -73,4 +75,58 @@ func (s *DashboardService) GetDashboard() (*DashboardData, error) {
 	d.RecentComments = comments
 
 	return d, nil
+}
+
+// ViewTrendPoint 单日浏览量（前端折线图一个点）
+type ViewTrendPoint struct {
+	Date  string `json:"date"`  // YYYY-MM-DD
+	Views int64  `json:"views"` // 当日浏览明细条数
+}
+
+// ViewTrend 近 N 天浏览量趋势（按 article_views 明细表按天聚合）
+//
+// 为什么用明细表而不是文章的 ViewCount？
+//
+//	ViewCount 是"累计值"，无法拆出"某天新增多少"；
+//	article_views 每行是一次真实浏览（带 ViewedAt），按天 GROUP BY 即可得到趋势。
+//	当天无浏览的日期也要出现在结果里（前端折线图需要连续日期），Go 侧补 0。
+//
+// 为什么用 DATE_FORMAT 而不是 DATE()？
+//
+//	MySQL 驱动开启 parseTime 后，DATE() 返回的 date 类型会被转成 time.Time，
+//	Scan 进 string 字段时变成 "2026-08-10T00:00:00+08:00" 这种格式，
+//	和 Go 侧 key（"2026-08-10"）对不上。DATE_FORMAT 直接返回纯字符串。
+//	注意：这是 MySQL 专有函数，本方法无单测依赖 sqlite，生产仅 MySQL，可接受。
+func (s *DashboardService) ViewTrend(days int) ([]ViewTrendPoint, error) {
+	if days <= 0 || days > 365 {
+		days = 30
+	}
+	// 起点：今天往前推 days-1 天的 00:00
+	today := time.Now()
+	start := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.Local).
+		AddDate(0, 0, -(days - 1))
+
+	var rows []struct {
+		Date  string
+		Views int64
+	}
+	if err := s.db.Raw(
+		"SELECT DATE_FORMAT(viewed_at, '%Y-%m-%d') AS date, COUNT(*) AS views FROM article_views "+
+			"WHERE viewed_at >= ? AND deleted_at IS NULL GROUP BY DATE_FORMAT(viewed_at, '%Y-%m-%d') ORDER BY date",
+		start,
+	).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	// 缺失日期补 0（当天没浏览也要有"一个点"）
+	byDate := make(map[string]int64, len(rows))
+	for _, r := range rows {
+		byDate[r.Date] = r.Views
+	}
+	out := make([]ViewTrendPoint, 0, days)
+	for i := 0; i < days; i++ {
+		key := start.AddDate(0, 0, i).Format("2006-01-02")
+		out = append(out, ViewTrendPoint{Date: key, Views: byDate[key]})
+	}
+	return out, nil
 }
